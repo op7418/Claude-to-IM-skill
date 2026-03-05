@@ -4,6 +4,8 @@ Bridge Claude Code to IM platforms — chat with Claude from Telegram, Discord, 
 
 [中文文档](README_CN.md)
 
+> **Want a desktop GUI instead?** Check out [CodePilot](https://github.com/op7418/CodePilot) — a full-featured desktop app with visual chat interface, session management, file tree preview, permission controls, and more. This skill was extracted from CodePilot's IM bridge module for users who prefer a lightweight, CLI-only setup.
+
 ---
 
 ## How It Works
