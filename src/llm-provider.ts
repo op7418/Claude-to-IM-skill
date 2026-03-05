@@ -89,30 +89,37 @@ function isExecutable(p: string): boolean {
 
 /**
  * Resolve the path to the `claude` CLI executable.
- * Priority: CTI_CLAUDE_CODE_EXECUTABLE env → command -v claude → common install paths.
+ * Priority: CTI_CLAUDE_CODE_EXECUTABLE env → which/where command → common install paths.
  */
 export function resolveClaudeCliPath(): string | undefined {
   // 1. Explicit env var
   const fromEnv = process.env.CTI_CLAUDE_CODE_EXECUTABLE;
   if (fromEnv && isExecutable(fromEnv)) return fromEnv;
 
-  // 2. command -v claude (respects PATH)
+  // 2. Platform-specific command (which for Unix, where for Windows)
+  const isWindows = process.platform === 'win32';
+  const cmd = isWindows ? 'where claude' : 'which claude';
   try {
-    const resolved = execSync('command -v claude', { encoding: 'utf-8', timeout: 3000 }).trim();
+    const resolved = execSync(cmd, { encoding: 'utf-8', timeout: 3000 }).trim().split('\n')[0];
     if (resolved && isExecutable(resolved)) return resolved;
   } catch {
     // not found in PATH
   }
 
   // 3. Common install locations
-  const candidates = [
-    '/usr/local/bin/claude',
-    '/opt/homebrew/bin/claude',
-    `${process.env.HOME}/.npm-global/bin/claude`,
-    `${process.env.HOME}/.local/bin/claude`,
-  ];
+  const candidates = isWindows
+    ? [
+        process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\Programs\\claude\\claude.exe` : '',
+        'C:\\Program Files\\claude\\claude.exe',
+      ].filter(Boolean)
+    : [
+        '/usr/local/bin/claude',
+        '/opt/homebrew/bin/claude',
+        `${process.env.HOME}/.npm-global/bin/claude`,
+        `${process.env.HOME}/.local/bin/claude`,
+      ];
   for (const p of candidates) {
-    if (isExecutable(p)) return p;
+    if (p && isExecutable(p)) return p;
   }
 
   return undefined;
