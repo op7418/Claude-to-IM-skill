@@ -1,6 +1,6 @@
 # Claude-to-IM Skill
 
-将 Claude Code / Codex 桥接到 IM 平台 —— 在 Telegram、Discord 或飞书中与 AI 编程代理对话。
+将 Claude Code / Codex / CodeBuddy 桥接到 IM 平台 —— 在 Telegram、Discord 或飞书中与 AI 编程代理对话。
 
 [English](README.md)
 
@@ -10,14 +10,14 @@
 
 ## 工作原理
 
-本 Skill 运行一个后台守护进程，将你的 IM 机器人连接到 Claude Code 或 Codex 会话。来自 IM 的消息被转发给 AI 编程代理，响应（包括工具调用、权限请求、流式预览）会发回到聊天中。
+本 Skill 运行一个后台守护进程，将你的 IM 机器人连接到 Claude Code、Codex 或 CodeBuddy 会话。来自 IM 的消息被转发给 AI 编程代理，响应（包括工具调用、权限请求、流式预览）会发回到聊天中。
 
 ```
 你 (Telegram/Discord/飞书)
   ↕ Bot API
 后台守护进程 (Node.js)
-  ↕ Claude Agent SDK 或 Codex SDK（通过 CTI_RUNTIME 配置）
-Claude Code / Codex → 读写你的代码库
+  ↕ Claude Agent SDK 或 Codex SDK 或 CodeBuddy Agent SDK（通过 CTI_RUNTIME 配置）
+Claude Code / Codex / CodeBuddy → 读写你的代码库
 ```
 
 ## 功能特点
@@ -35,6 +35,7 @@ Claude Code / Codex → 读写你的代码库
 - **Node.js >= 20**
 - **Claude Code CLI**（`CTI_RUNTIME=claude` 或 `auto` 时需要）— 已安装并完成认证（`claude` 命令可用）
 - **Codex CLI**（`CTI_RUNTIME=codex` 或 `auto` 时需要）— `npm install -g @openai/codex`。鉴权：运行 `codex auth login`，或设置 `OPENAI_API_KEY`（可选，API 模式）
+- **CodeBuddy Code CLI**（`CTI_RUNTIME=codebuddy` 时需要）— 已安装并登录（`codebuddy` 命令可用）
 
 ## 安装
 
@@ -185,6 +186,7 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 | `src/store.ts` | JSON 文件 BridgeStore（30 个方法，写穿缓存） |
 | `src/llm-provider.ts` | Claude Agent SDK `query()` → SSE 流 |
 | `src/codex-provider.ts` | Codex SDK `runStreamed()` → SSE 流 |
+| `src/codebuddy-provider.ts` | CodeBuddy Agent SDK `query()` → SSE 流 |
 | `src/sse-utils.ts` | 共享的 SSE 格式化辅助函数 |
 | `src/permission-gateway.ts` | 异步桥接：SDK `canUseTool` ↔ IM 按钮 |
 | `src/logger.ts` | 密钥脱敏的文件日志，支持轮转 |

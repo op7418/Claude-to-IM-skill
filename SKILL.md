@@ -89,9 +89,10 @@ For each enabled channel, read `SKILL_DIR/references/setup-guides.md` and presen
 **Step 3 — General settings**
 
 Ask for runtime, default working directory, model, and mode:
-- **Runtime**: `claude` (default), `codex`, `auto`
+- **Runtime**: `claude` (default), `codex`, `codebuddy`, `auto`
   - `claude` — uses Claude Code CLI + Claude Agent SDK (requires `claude` CLI installed)
   - `codex` — uses OpenAI Codex SDK (requires `codex` CLI; auth via `codex auth login` or `OPENAI_API_KEY`)
+  - `codebuddy` — uses CodeBuddy Code CLI + Tencent AI Agent SDK (requires `codebuddy` CLI installed and logged in)
   - `auto` — tries Claude first, falls back to Codex if Claude CLI not found
 - **Working Directory**: default `$CWD`
 - **Model** (optional): Leave blank to inherit the runtime's own default model. If the user wants to override, ask them to enter a model name. Do NOT hardcode or suggest specific model names — the available models change over time.
