@@ -8,6 +8,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
+// Set up global fetch proxy from environment variables.
+// Node.js built-in fetch uses its own internal undici instance, so we must set
+// the dispatcher via the well-known Symbol that Node's internal undici checks.
+const _proxyUrl = process.env.https_proxy || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.HTTP_PROXY || process.env.ALL_PROXY;
+if (_proxyUrl) {
+  const { ProxyAgent } = await import('undici');
+  globalThis[Symbol.for('undici.globalDispatcher.1')] = new ProxyAgent(_proxyUrl);
+}
+
 import { initBridgeContext } from 'claude-to-im/src/lib/bridge/context.js';
 import * as bridgeManager from 'claude-to-im/src/lib/bridge/bridge-manager.js';
 // Side-effect import to trigger adapter self-registration

@@ -14,8 +14,8 @@ build_env_dict() {
   local indent="            "
   local dict=""
 
-  # Always forward basics
-  for var in HOME PATH USER SHELL LANG TMPDIR; do
+  # Always forward basics + proxy vars
+  for var in HOME PATH USER SHELL LANG TMPDIR http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy NO_PROXY no_proxy; do
     local val="${!var:-}"
     [ -z "$val" ] && continue
     dict+="${indent}<key>${var}</key>\n${indent}<string>${val}</string>\n"
