@@ -29,7 +29,8 @@ const PID_FILE = path.join(RUNTIME_DIR, 'bridge.pid');
  * Resolve the LLM provider based on the runtime setting.
  * - 'claude' (default): uses Claude Code SDK via SDKLLMProvider
  * - 'codex': uses @openai/codex-sdk via CodexProvider
- * - 'auto': tries Claude first, falls back to Codex
+ * - 'kimi': uses kimi CLI via KimiProvider
+ * - 'auto': tries Claude first, falls back to Kimi if not found
  */
 async function resolveProvider(config: Config, pendingPerms: PendingPermissions): Promise<LLMProvider> {
   const runtime = config.runtime;
@@ -39,15 +40,20 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
     return new CodexProvider(pendingPerms);
   }
 
+  if (runtime === 'kimi') {
+    const { KimiProvider } = await import('./kimi-provider.js');
+    return new KimiProvider(pendingPerms);
+  }
+
   if (runtime === 'auto') {
     const cliPath = resolveClaudeCliPath();
     if (cliPath) {
       console.log(`[claude-to-im] Auto: using Claude CLI at ${cliPath}`);
       return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove);
     }
-    console.log('[claude-to-im] Auto: Claude CLI not found, falling back to Codex');
-    const { CodexProvider } = await import('./codex-provider.js');
-    return new CodexProvider(pendingPerms);
+    console.log('[claude-to-im] Auto: Claude CLI not found, falling back to Kimi');
+    const { KimiProvider } = await import('./kimi-provider.js');
+    return new KimiProvider(pendingPerms);
   }
 
   // Default: claude
@@ -57,7 +63,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
       '[claude-to-im] FATAL: Cannot find the `claude` CLI executable.\n' +
       '  Tried: CTI_CLAUDE_CODE_EXECUTABLE env, /usr/local/bin/claude, /opt/homebrew/bin/claude, ~/.npm-global/bin/claude, ~/.local/bin/claude\n' +
       '  Fix: Install Claude Code CLI (https://docs.anthropic.com/en/docs/claude-code) or set CTI_CLAUDE_CODE_EXECUTABLE=/path/to/claude\n' +
-      '  Or: Set CTI_RUNTIME=codex to use Codex instead',
+      '  Or: Set CTI_RUNTIME=kimi to use Kimi CLI instead',
     );
     process.exit(1);
   }
