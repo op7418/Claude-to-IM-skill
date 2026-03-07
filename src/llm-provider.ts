@@ -71,6 +71,13 @@ export function buildSubprocessEnv(): Record<string, string> {
         if (v !== undefined && (k.startsWith('OPENAI_') || k.startsWith('CODEX_'))) out[k] = v;
       }
     }
+
+    // In kimi/auto mode, pass through KIMI_* env vars
+    if (runtime === 'kimi' || runtime === 'auto') {
+      for (const [k, v] of Object.entries(process.env)) {
+        if (v !== undefined && k.startsWith('KIMI_')) out[k] = v;
+      }
+    }
   }
 
   return out;

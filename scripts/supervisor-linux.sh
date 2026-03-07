@@ -2,9 +2,31 @@
 # Linux supervisor — setsid/nohup fallback process management.
 # Sourced by daemon.sh; expects CTI_HOME, SKILL_DIR, PID_FILE, STATUS_FILE, LOG_FILE.
 
+# ── Environment helpers ──
+
+# Export Kimi-related env vars for the daemon process
+export_kimi_env() {
+  local runtime
+  runtime=$(grep "^CTI_RUNTIME=" "$CTI_HOME/config.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d "'" | tr -d '"' || true)
+  runtime="${runtime:-claude}"
+
+  case "$runtime" in
+    kimi|auto)
+      for var in KIMI_API_KEY KIMI_BASE_URL KIMI_CLI_PATH CTI_KIMI_EXECUTABLE; do
+        local val="${!var:-}"
+        [ -z "$val" ] && continue
+        export "$var=$val"
+      done
+      ;;
+  esac
+}
+
 # ── Public interface (called by daemon.sh) ──
 
 supervisor_start() {
+  # Export runtime-specific env vars before starting
+  export_kimi_env
+
   if command -v setsid >/dev/null 2>&1; then
     setsid node "$SKILL_DIR/dist/daemon.mjs" >> "$LOG_FILE" 2>&1 < /dev/null &
   else

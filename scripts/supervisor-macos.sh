@@ -53,6 +53,15 @@ build_env_dict() {
       fi
       ;;
   esac
+  case "$runtime" in
+    kimi|auto)
+      for var in KIMI_API_KEY KIMI_BASE_URL KIMI_CLI_PATH CTI_KIMI_EXECUTABLE; do
+        local val="${!var:-}"
+        [ -z "$val" ] && continue
+        dict+="${indent}<key>${var}</key>\n${indent}<string>${val}</string>\n"
+      done
+      ;;
+  esac
 
   echo -e "$dict"
 }

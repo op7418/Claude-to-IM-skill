@@ -60,6 +60,15 @@ clean_env() {
           done < <(env)
         fi
         ;;
+      kimi)
+        # Strip Anthropic and OpenAI env vars when using Kimi
+        while IFS='=' read -r name _; do
+          case "$name" in ANTHROPIC_*) unset "$name" 2>/dev/null || true ;; esac
+        done < <(env)
+        while IFS='=' read -r name _; do
+          case "$name" in OPENAI_*) unset "$name" 2>/dev/null || true ;; esac
+        done < <(env)
+        ;;
     esac
   fi
 }
