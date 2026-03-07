@@ -50,6 +50,14 @@ function parseEnvFile(content: string): Map<string, string> {
   return entries;
 }
 
+function expandShellVars(value: string): string {
+  return value
+    .replace(/\$\{HOME\}/g, os.homedir())
+    .replace(/\$HOME/g, os.homedir())
+    .replace(/\$\{CWD\}/g, process.cwd())
+    .replace(/\$CWD/g, process.cwd());
+}
+
 function splitCsv(value: string | undefined): string[] | undefined {
   if (!value) return undefined;
   return value
@@ -73,7 +81,7 @@ export function loadConfig(): Config {
   return {
     runtime,
     enabledChannels: splitCsv(env.get("CTI_ENABLED_CHANNELS")) ?? [],
-    defaultWorkDir: env.get("CTI_DEFAULT_WORKDIR") || process.cwd(),
+    defaultWorkDir: expandShellVars(env.get("CTI_DEFAULT_WORKDIR") || process.cwd()),
     defaultModel: env.get("CTI_DEFAULT_MODEL") || undefined,
     defaultMode: env.get("CTI_DEFAULT_MODE") || "code",
     tgBotToken: env.get("CTI_TG_BOT_TOKEN") || undefined,
