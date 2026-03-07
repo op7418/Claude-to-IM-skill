@@ -196,6 +196,25 @@ if [ -f "$CONFIG_FILE" ]; then
       check "Discord bot token configured" 1
     fi
   fi
+
+  # --- DingTalk ---
+  if echo "$CTI_CHANNELS" | grep -q dingtalk; then
+    DT_CLIENT_ID=$(get_config CTI_DINGTALK_CLIENT_ID)
+    DT_CLIENT_SECRET=$(get_config CTI_DINGTALK_CLIENT_SECRET)
+    if [ -n "$DT_CLIENT_ID" ] && [ -n "$DT_CLIENT_SECRET" ]; then
+      # Validate by requesting an access token
+      DT_RESULT=$(curl -s --max-time 5 -X POST "https://api.dingtalk.com/v1.0/oauth2/accessToken" \
+        -H "Content-Type: application/json" \
+        -d "{\"appKey\":\"${DT_CLIENT_ID}\",\"appSecret\":\"${DT_CLIENT_SECRET}\"}" 2>/dev/null || echo '{"accessToken":""}')
+      if echo "$DT_RESULT" | grep -q '"accessToken"[[:space:]]*:[[:space:]]*"[^"]'; then
+        check "DingTalk app credentials are valid" 0
+      else
+        check "DingTalk app credentials are valid (accessToken request failed)" 1
+      fi
+    else
+      check "DingTalk app credentials configured" 1
+    fi
+  fi
 fi
 
 # --- Log directory writable ---

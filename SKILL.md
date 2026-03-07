@@ -1,7 +1,7 @@
 ---
 name: claude-to-im
 description: |
-  This skill bridges Claude Code to IM platforms (Telegram, Discord, Feishu/Lark).
+  This skill bridges Claude Code to IM platforms (Telegram, Discord, Feishu/Lark, DingTalk).
   It should be used when the user wants to start a background daemon that forwards
   IM messages to Claude Code sessions, or manage that daemon's lifecycle.
   Trigger on: "claude-to-im", "start bridge", "stop bridge", "bridge status",
@@ -73,10 +73,11 @@ When AskUserQuestion IS available, collect input **one field at a time**. After 
 
 **Step 1 — Choose channels**
 
-Ask which channels to enable (telegram, discord, feishu). Accept comma-separated input. Briefly describe each:
+Ask which channels to enable (telegram, discord, feishu, dingtalk). Accept comma-separated input. Briefly describe each:
 - **telegram** — Best for personal use. Streaming preview, inline permission buttons.
 - **discord** — Good for team use. Server/channel/user-level access control.
 - **feishu** (Lark) — For Feishu/Lark teams. Event-based messaging.
+- **dingtalk** — For DingTalk teams. Stream mode with WebSocket long connection.
 
 **Step 2 — Collect tokens per channel**
 
@@ -85,6 +86,7 @@ For each enabled channel, read `SKILL_DIR/references/setup-guides.md` and presen
 - **Telegram**: Bot Token → confirm (masked) → Chat ID (see guide for how to get it) → confirm → Allowed User IDs (optional). **Important:** At least one of Chat ID or Allowed User IDs must be set, otherwise the bot will reject all messages.
 - **Discord**: Bot Token → confirm (masked) → Allowed User IDs → Allowed Channel IDs (optional) → Allowed Guild IDs (optional). **Important:** At least one of Allowed User IDs or Allowed Channel IDs must be set, otherwise the bot will reject all messages (default-deny).
 - **Feishu**: App ID → confirm → App Secret → confirm (masked) → Domain (optional) → Allowed User IDs (optional). Guide through all 4 steps (A: batch permissions, B: enable bot, C: events & callbacks with long connection, D: publish version).
+- **DingTalk**: Client ID (AppKey) → confirm → Client Secret (AppSecret) → confirm (masked) → Robot Code (optional, defaults to Client ID) → Allowed User IDs (optional) → Allowed Group IDs (optional). Guide through all 3 steps (A: create app & enable bot, B: configure Stream mode, C: publish).
 
 **Step 3 — General settings**
 

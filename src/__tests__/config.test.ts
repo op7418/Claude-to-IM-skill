@@ -40,10 +40,11 @@ describe('configToSettings', () => {
   });
 
   it('sets channel enabled flags based on enabledChannels', () => {
-    const m = configToSettings({ ...base, enabledChannels: ['telegram', 'discord'] });
+    const m = configToSettings({ ...base, enabledChannels: ['telegram', 'discord', 'dingtalk'] });
     assert.equal(m.get('bridge_telegram_enabled'), 'true');
     assert.equal(m.get('bridge_discord_enabled'), 'true');
     assert.equal(m.get('bridge_feishu_enabled'), 'false');
+    assert.equal(m.get('bridge_dingtalk_enabled'), 'true');
   });
 
   it('maps telegram config', () => {
@@ -89,6 +90,35 @@ describe('configToSettings', () => {
     assert.equal(m.get('bridge_feishu_allowed_users'), 'fu1');
   });
 
+  it('maps dingtalk config', () => {
+    const m = configToSettings({
+      ...base,
+      enabledChannels: ['dingtalk'],
+      dingtalkClientId: 'dt-app-key',
+      dingtalkClientSecret: 'dt-app-secret',
+      dingtalkRobotCode: 'dt-robot',
+      dingtalkAllowedUsers: ['staff1', 'staff2'],
+      dingtalkAllowedGroups: ['cid123'],
+    });
+    assert.equal(m.get('bridge_dingtalk_enabled'), 'true');
+    assert.equal(m.get('bridge_dingtalk_client_id'), 'dt-app-key');
+    assert.equal(m.get('bridge_dingtalk_client_secret'), 'dt-app-secret');
+    assert.equal(m.get('bridge_dingtalk_robot_code'), 'dt-robot');
+    assert.equal(m.get('bridge_dingtalk_require_mention'), 'true');
+    assert.equal(m.get('bridge_dingtalk_allowed_users'), 'staff1,staff2');
+    assert.equal(m.get('bridge_dingtalk_allowed_groups'), 'cid123');
+  });
+
+  it('uses client_id as robot_code when robot_code not set', () => {
+    const m = configToSettings({
+      ...base,
+      enabledChannels: ['dingtalk'],
+      dingtalkClientId: 'dt-app-key',
+      dingtalkClientSecret: 'dt-app-secret',
+    });
+    assert.equal(m.get('bridge_dingtalk_robot_code'), 'dt-app-key');
+  });
+
   it('maps workdir and mode, omits model when not set', () => {
     const m = configToSettings(base);
     assert.equal(m.get('bridge_default_work_dir'), '/tmp/test');
@@ -113,6 +143,7 @@ describe('configToSettings', () => {
     assert.equal(m.has('telegram_bot_token'), false);
     assert.equal(m.has('bridge_discord_bot_token'), false);
     assert.equal(m.has('bridge_feishu_app_id'), false);
+    assert.equal(m.has('bridge_dingtalk_client_id'), false);
   });
 });
 
@@ -144,5 +175,5 @@ describe('loadConfig/saveConfig round-trip', () => {
     assert.equal(m.get('bridge_telegram_enabled'), 'false');
     assert.equal(m.get('bridge_discord_enabled'), 'false');
     assert.equal(m.get('bridge_feishu_enabled'), 'false');
-  });
+    assert.equal(m.get('bridge_dingtalk_enabled'), 'false');
 });

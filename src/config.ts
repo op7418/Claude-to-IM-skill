@@ -22,6 +22,12 @@ export interface Config {
   discordAllowedUsers?: string[];
   discordAllowedChannels?: string[];
   discordAllowedGuilds?: string[];
+  // DingTalk
+  dingtalkClientId?: string;
+  dingtalkClientSecret?: string;
+  dingtalkRobotCode?: string;
+  dingtalkAllowedUsers?: string[];
+  dingtalkAllowedGroups?: string[];
   // Auto-approve all tool permission requests without user confirmation
   autoApprove?: boolean;
 }
@@ -89,6 +95,11 @@ export function loadConfig(): Config {
       env.get("CTI_DISCORD_ALLOWED_CHANNELS")
     ),
     discordAllowedGuilds: splitCsv(env.get("CTI_DISCORD_ALLOWED_GUILDS")),
+    dingtalkClientId: env.get("CTI_DINGTALK_CLIENT_ID") || undefined,
+    dingtalkClientSecret: env.get("CTI_DINGTALK_CLIENT_SECRET") || undefined,
+    dingtalkRobotCode: env.get("CTI_DINGTALK_ROBOT_CODE") || undefined,
+    dingtalkAllowedUsers: splitCsv(env.get("CTI_DINGTALK_ALLOWED_USERS")),
+    dingtalkAllowedGroups: splitCsv(env.get("CTI_DINGTALK_ALLOWED_GROUPS")),
     autoApprove: env.get("CTI_AUTO_APPROVE") === "true",
   };
 }
@@ -133,6 +144,17 @@ export function saveConfig(config: Config): void {
   out += formatEnvLine(
     "CTI_DISCORD_ALLOWED_GUILDS",
     config.discordAllowedGuilds?.join(",")
+  );
+  out += formatEnvLine("CTI_DINGTALK_CLIENT_ID", config.dingtalkClientId);
+  out += formatEnvLine("CTI_DINGTALK_CLIENT_SECRET", config.dingtalkClientSecret);
+  out += formatEnvLine("CTI_DINGTALK_ROBOT_CODE", config.dingtalkRobotCode);
+  out += formatEnvLine(
+    "CTI_DINGTALK_ALLOWED_USERS",
+    config.dingtalkAllowedUsers?.join(",")
+  );
+  out += formatEnvLine(
+    "CTI_DINGTALK_ALLOWED_GROUPS",
+    config.dingtalkAllowedGroups?.join(",")
   );
 
   fs.mkdirSync(CTI_HOME, { recursive: true });
@@ -198,6 +220,29 @@ export function configToSettings(config: Config): Map<string, string> {
   if (config.feishuDomain) m.set("bridge_feishu_domain", config.feishuDomain);
   if (config.feishuAllowedUsers)
     m.set("bridge_feishu_allowed_users", config.feishuAllowedUsers.join(","));
+
+  // ── DingTalk ──
+  // Upstream keys: bridge_dingtalk_client_id, bridge_dingtalk_client_secret,
+  //   bridge_dingtalk_robot_code, bridge_dingtalk_enabled,
+  //   bridge_dingtalk_allowed_users, bridge_dingtalk_allowed_groups,
+  //   bridge_dingtalk_require_mention
+  m.set(
+    "bridge_dingtalk_enabled",
+    config.enabledChannels.includes("dingtalk") ? "true" : "false"
+  );
+  if (config.dingtalkClientId)
+    m.set("bridge_dingtalk_client_id", config.dingtalkClientId);
+  if (config.dingtalkClientSecret)
+    m.set("bridge_dingtalk_client_secret", config.dingtalkClientSecret);
+  if (config.dingtalkRobotCode)
+    m.set("bridge_dingtalk_robot_code", config.dingtalkRobotCode);
+  else if (config.dingtalkClientId)
+    m.set("bridge_dingtalk_robot_code", config.dingtalkClientId);
+  m.set("bridge_dingtalk_require_mention", "true");
+  if (config.dingtalkAllowedUsers)
+    m.set("bridge_dingtalk_allowed_users", config.dingtalkAllowedUsers.join(","));
+  if (config.dingtalkAllowedGroups)
+    m.set("bridge_dingtalk_allowed_groups", config.dingtalkAllowedGroups.join(","));
 
   // ── Defaults ──
   // Upstream keys: bridge_default_work_dir, bridge_default_model, default_model
