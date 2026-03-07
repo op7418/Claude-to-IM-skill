@@ -9,12 +9,22 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 // Set up global fetch proxy from environment variables.
-// Node.js built-in fetch uses its own internal undici instance, so we must set
-// the dispatcher via the well-known Symbol that Node's internal undici checks.
+// Node.js built-in fetch uses its bundled undici; we override its dispatcher via
+// the well-known Symbol `undici.globalDispatcher.1` (stable in Node.js >= 18.x).
+// NOTE: undici ProxyAgent only supports HTTP/HTTPS proxies. SOCKS proxies
+// (e.g. socks5://...) will fail and a warning will be printed.
 const _proxyUrl = process.env.https_proxy || process.env.HTTPS_PROXY || process.env.http_proxy || process.env.HTTP_PROXY || process.env.ALL_PROXY;
 if (_proxyUrl) {
-  const { ProxyAgent } = await import('undici');
-  globalThis[Symbol.for('undici.globalDispatcher.1')] = new ProxyAgent(_proxyUrl);
+  try {
+    const { ProxyAgent } = await import('undici');
+    globalThis[Symbol.for('undici.globalDispatcher.1')] = new ProxyAgent(_proxyUrl);
+  } catch (err) {
+    console.warn(
+      `[claude-to-im] Failed to set up proxy (${_proxyUrl}). ` +
+      `Only HTTP/HTTPS proxies are supported; SOCKS proxies are not. ` +
+      `Error: ${err instanceof Error ? err.message : err}`,
+    );
+  }
 }
 
 import { initBridgeContext } from 'claude-to-im/src/lib/bridge/context.js';
