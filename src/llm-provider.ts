@@ -25,6 +25,8 @@ const ENV_WHITELIST = new Set([
   'NODE_PATH', 'NODE_EXTRA_CA_CERTS',
   'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME',
   'SSH_AUTH_SOCK',
+  'http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY',
+  'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy',
 ]);
 
 /** Prefixes that are always stripped (even in inherit mode). */

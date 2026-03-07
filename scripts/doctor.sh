@@ -22,11 +22,19 @@ check() {
 
 # --- Node.js version ---
 if command -v node &>/dev/null; then
-  NODE_VER=$(node -v | sed 's/v//' | cut -d. -f1)
-  if [ "$NODE_VER" -ge 20 ] 2>/dev/null; then
-    check "Node.js >= 20 (found v$(node -v | sed 's/v//'))" 0
+  NODE_VER_FULL=$(node -v | sed 's/v//')
+  NODE_MAJOR=$(echo "$NODE_VER_FULL" | cut -d. -f1)
+  NODE_MINOR=$(echo "$NODE_VER_FULL" | cut -d. -f2)
+  NODE_PATCH=$(echo "$NODE_VER_FULL" | cut -d. -f3)
+  # undici@7 requires Node.js >= 20.18.1
+  if [ "$NODE_MAJOR" -gt 20 ] 2>/dev/null; then
+    check "Node.js >= 20.18.1 (found v${NODE_VER_FULL})" 0
+  elif [ "$NODE_MAJOR" -eq 20 ] && [ "$NODE_MINOR" -gt 18 ] 2>/dev/null; then
+    check "Node.js >= 20.18.1 (found v${NODE_VER_FULL})" 0
+  elif [ "$NODE_MAJOR" -eq 20 ] && [ "$NODE_MINOR" -eq 18 ] && [ "${NODE_PATCH:-0}" -ge 1 ] 2>/dev/null; then
+    check "Node.js >= 20.18.1 (found v${NODE_VER_FULL})" 0
   else
-    check "Node.js >= 20 (found v$(node -v | sed 's/v//'), need >= 20)" 1
+    check "Node.js >= 20.18.1 (found v${NODE_VER_FULL}, need >= 20.18.1)" 1
   fi
 else
   check "Node.js installed" 1
