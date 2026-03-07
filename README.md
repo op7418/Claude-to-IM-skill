@@ -1,6 +1,6 @@
 # Claude-to-IM Skill
 
-Bridge Claude Code / Codex to IM platforms — chat with AI coding agents from Telegram, Discord, or Feishu/Lark.
+Bridge Claude Code / Codex / CodeBuddy to IM platforms — chat with AI coding agents from Telegram, Discord, or Feishu/Lark.
 
 [中文文档](README_CN.md)
 
@@ -10,14 +10,14 @@ Bridge Claude Code / Codex to IM platforms — chat with AI coding agents from T
 
 ## How It Works
 
-This skill runs a background daemon that connects your IM bots to Claude Code or Codex sessions. Messages from IM are forwarded to the AI coding agent, and responses (including tool use, permission requests, streaming previews) are sent back to your chat.
+This skill runs a background daemon that connects your IM bots to Claude Code, Codex, or CodeBuddy sessions. Messages from IM are forwarded to the AI coding agent, and responses (including tool use, permission requests, streaming previews) are sent back to your chat.
 
 ```
 You (Telegram/Discord/Feishu)
   ↕ Bot API
 Background Daemon (Node.js)
-  ↕ Claude Agent SDK or Codex SDK (configurable via CTI_RUNTIME)
-Claude Code / Codex → reads/writes your codebase
+  ↕ Claude Agent SDK / Codex SDK / CodeBuddy Agent SDK (configurable via CTI_RUNTIME)
+Claude Code / Codex / CodeBuddy → reads/writes your codebase
 ```
 
 ## Features
@@ -35,6 +35,7 @@ Claude Code / Codex → reads/writes your codebase
 - **Node.js >= 20**
 - **Claude Code CLI** (for `CTI_RUNTIME=claude` or `auto`) — installed and authenticated (`claude` command available)
 - **Codex CLI** (for `CTI_RUNTIME=codex` or `auto`) — `npm install -g @openai/codex`. Auth: run `codex auth login`, or set `OPENAI_API_KEY` (optional, for API mode)
+- **CodeBuddy Code CLI** (for `CTI_RUNTIME=codebuddy`) — installed and logged in (`codebuddy` command available)
 
 ## Installation
 
@@ -185,6 +186,7 @@ The `setup` wizard provides inline guidance for every step. Here's a summary:
 | `src/store.ts` | JSON file BridgeStore (30 methods, write-through cache) |
 | `src/llm-provider.ts` | Claude Agent SDK `query()` → SSE stream |
 | `src/codex-provider.ts` | Codex SDK `runStreamed()` → SSE stream |
+| `src/codebuddy-provider.ts` | CodeBuddy Agent SDK `query()` → SSE stream |
 | `src/sse-utils.ts` | Shared SSE formatting helper |
 | `src/permission-gateway.ts` | Async bridge: SDK `canUseTool` ↔ IM buttons |
 | `src/logger.ts` | Secret-redacted file logging with rotation |
