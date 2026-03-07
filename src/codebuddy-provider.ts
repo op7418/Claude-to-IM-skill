@@ -5,13 +5,18 @@
  * the bridge conversation engine, making CodeBuddy a drop-in alternative
  * to the Claude Code SDK backend.
  *
+ * NOTE: This file mirrors llm-provider.ts — keep in sync.
+ * The structure (buildSubprocessEnv, isExecutable, buildPrompt, handleMessage)
+ * is intentionally similar to the Claude provider. Future changes to either
+ * file should be reflected in both.
+ *
  * Key differences from the Claude provider (llm-provider.ts):
  * - SDK import: @tencent-ai/agent-sdk instead of @anthropic-ai/claude-agent-sdk
  * - CLI option key: pathToCodebuddyCode instead of pathToClaudeCodeExecutable
  * - Permission allow response requires { updatedInput } field
  * - CLI path must be symlink-resolved (SDK derives headless entry point
  *   relative to the binary location)
- * - Env isolation strips CODEBUDDY* prefix instead of CLAUDECODE
+ * - Env isolation strips CODEBUDDY instead of CLAUDECODE
  */
 
 import fs from 'node:fs';
@@ -58,7 +63,7 @@ function buildSubprocessEnv(): Record<string, string> {
   if (mode === 'inherit') {
     for (const [k, v] of Object.entries(process.env)) {
       if (v === undefined) continue;
-      if (ENV_ALWAYS_STRIP.some(prefix => k.startsWith(prefix))) continue;
+      if (ENV_ALWAYS_STRIP.includes(k)) continue;
       out[k] = v;
     }
   } else {
