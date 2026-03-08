@@ -43,7 +43,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
     const cliPath = resolveClaudeCliPath();
     if (cliPath) {
       console.log(`[claude-to-im] Auto: using Claude CLI at ${cliPath}`);
-      return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove);
+      return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove, config.groqApiKey);
     }
     console.log('[claude-to-im] Auto: Claude CLI not found, falling back to Codex');
     const { CodexProvider } = await import('./codex-provider.js');
@@ -62,7 +62,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
     process.exit(1);
   }
   console.log(`[claude-to-im] Using Claude CLI: ${cliPath}`);
-  return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove);
+  return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove, config.groqApiKey);
 }
 
 interface StatusInfo {
