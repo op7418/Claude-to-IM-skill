@@ -43,6 +43,8 @@ export async function transcribeAudioIfNeeded(
     const filePath = match[0];
     const transcription = await transcribeFile(filePath, groqApiKey);
     if (transcription === null) continue;
+    // replace() without /g replaces the first remaining occurrence each iteration,
+    // correctly handling duplicate paths when matchAll yields them multiple times.
     result = result.replace(filePath, `[Voice message (transcribed): "${transcription}"]`);
   }
 
