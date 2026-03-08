@@ -41,17 +41,8 @@ export async function transcribeAudioIfNeeded(
 
   for (const match of matches) {
     const filePath = match[0];
-
-    try {
-      fs.accessSync(filePath, fs.constants.R_OK);
-    } catch {
-      console.warn(`[stt] Audio file not found, skipping: ${filePath}`);
-      continue;
-    }
-
     const transcription = await transcribeFile(filePath, groqApiKey);
     if (transcription === null) continue;
-
     result = result.replace(filePath, `[Voice message (transcribed): "${transcription}"]`);
   }
 
@@ -67,7 +58,7 @@ async function transcribeFile(
   groqApiKey: string,
 ): Promise<string | null> {
   try {
-    const fileBuffer = fs.readFileSync(filePath);
+    const fileBuffer = await fs.promises.readFile(filePath);
     const fileName = filePath.split('/').pop() ?? 'audio.ogg';
     const blob = new Blob([fileBuffer]);
 

@@ -5,6 +5,9 @@ import os from 'node:os';
 import fs from 'node:fs';
 
 describe('transcribeAudioIfNeeded', () => {
+  // Dynamic imports are used throughout because fetch is mocked via globalThis.fetch
+  // before each import. Node.js ESM caches modules, so the mock must be set up before
+  // the first import executes. Top-level imports would run before any test mock setup.
   it('returns prompt unchanged when no audio paths present', async () => {
     const { transcribeAudioIfNeeded } = await import('../stt.js');
     const prompt = 'Hello, can you help me with this code?';
@@ -92,7 +95,7 @@ describe('transcribeAudioIfNeeded', () => {
 
   it('falls back gracefully when audio file does not exist on disk', async () => {
     const { transcribeAudioIfNeeded } = await import('../stt.js');
-    const fakePath = path.join(os.tmpdir(), 'nonexistent_99999_voice.ogg');
+    const fakePath = path.join(os.tmpdir(), '9999999999_voice.ogg');
     const prompt = `[User uploaded 1 file(s)]\n  - ${fakePath}`;
     const result = await transcribeAudioIfNeeded(prompt, 'gsk_test');
     assert.equal(result, prompt);
