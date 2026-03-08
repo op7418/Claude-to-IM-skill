@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { maskSecret, configToSettings, type Config } from '../config.js';
+import { maskSecret, configToSettings, loadConfig, CONFIG_PATH, type Config } from '../config.js';
 
 // ── maskSecret ──
 
@@ -167,26 +167,27 @@ describe('configToSettings', () => {
 // ── groq api key ──
 
 describe('groq api key in config', () => {
-  it('loads CTI_GROQ_API_KEY via loadConfig', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cti-groq-'));
-    const configPath = path.join(tmpDir, 'config.env');
-    fs.writeFileSync(configPath, 'CTI_GROQ_API_KEY=gsk_test123\nCTI_RUNTIME=claude\nCTI_ENABLED_CHANNELS=discord\nCTI_DEFAULT_WORKDIR=/tmp\nCTI_DEFAULT_MODE=code\n');
-    const origHome = process.env.CTI_HOME;
-    process.env.CTI_HOME = tmpDir;
+  it('loadConfig reads CTI_GROQ_API_KEY from config file', () => {
+    // CONFIG_PATH is the path loadConfig() reads from.
+    // CTI_HOME is a fresh tmpdir (set by npm test script).
+    // We write our key there, call loadConfig(), and assert.
+    const original = fs.existsSync(CONFIG_PATH) ? fs.readFileSync(CONFIG_PATH, 'utf-8') : null;
     try {
-      // loadConfig is cached by module system — test the Config interface accepts the field
-      const cfg: Config = {
-        runtime: 'claude',
-        enabledChannels: [],
-        defaultWorkDir: '/tmp',
-        defaultMode: 'code',
-        groqApiKey: 'gsk_test123',
-      };
+      fs.writeFileSync(CONFIG_PATH, [
+        'CTI_RUNTIME=claude',
+        'CTI_ENABLED_CHANNELS=discord',
+        'CTI_DEFAULT_WORKDIR=/tmp',
+        'CTI_DEFAULT_MODE=code',
+        'CTI_GROQ_API_KEY=gsk_test123',
+      ].join('\n') + '\n');
+      const cfg = loadConfig();
       assert.equal(cfg.groqApiKey, 'gsk_test123');
     } finally {
-      if (origHome === undefined) delete process.env.CTI_HOME;
-      else process.env.CTI_HOME = origHome;
-      fs.rmSync(tmpDir, { recursive: true });
+      if (original === null) {
+        try { fs.unlinkSync(CONFIG_PATH); } catch { /* ok */ }
+      } else {
+        fs.writeFileSync(CONFIG_PATH, original);
+      }
     }
   });
 });
