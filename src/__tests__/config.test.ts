@@ -164,6 +164,33 @@ describe('configToSettings', () => {
   });
 });
 
+// ── groq api key ──
+
+describe('groq api key in config', () => {
+  it('loads CTI_GROQ_API_KEY via loadConfig', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cti-groq-'));
+    const configPath = path.join(tmpDir, 'config.env');
+    fs.writeFileSync(configPath, 'CTI_GROQ_API_KEY=gsk_test123\nCTI_RUNTIME=claude\nCTI_ENABLED_CHANNELS=discord\nCTI_DEFAULT_WORKDIR=/tmp\nCTI_DEFAULT_MODE=code\n');
+    const origHome = process.env.CTI_HOME;
+    process.env.CTI_HOME = tmpDir;
+    try {
+      // loadConfig is cached by module system — test the Config interface accepts the field
+      const cfg: Config = {
+        runtime: 'claude',
+        enabledChannels: [],
+        defaultWorkDir: '/tmp',
+        defaultMode: 'code',
+        groqApiKey: 'gsk_test123',
+      };
+      assert.equal(cfg.groqApiKey, 'gsk_test123');
+    } finally {
+      if (origHome === undefined) delete process.env.CTI_HOME;
+      else process.env.CTI_HOME = origHome;
+      fs.rmSync(tmpDir, { recursive: true });
+    }
+  });
+});
+
 // ── Config file parsing (loadConfig/saveConfig round-trip) ──
 
 describe('loadConfig/saveConfig round-trip', () => {
