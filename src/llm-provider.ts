@@ -13,6 +13,7 @@ import type { LLMProvider, StreamChatParams, FileAttachment } from 'claude-to-im
 import type { PendingPermissions } from './permission-gateway.js';
 
 import { sseEvent } from './sse-utils.js';
+import { transcribeAudioIfNeeded } from './stt.js';
 
 // ── Environment isolation ──
 
@@ -177,7 +178,12 @@ export class SDKLLMProvider implements LLMProvider {
   private cliPath: string | undefined;
   private autoApprove: boolean;
 
-  constructor(private pendingPerms: PendingPermissions, cliPath?: string, autoApprove = false) {
+  constructor(
+    private pendingPerms: PendingPermissions,
+    cliPath?: string,
+    autoApprove = false,
+    private groqApiKey = '',
+  ) {
     this.cliPath = cliPath;
     this.autoApprove = autoApprove;
   }
@@ -186,6 +192,7 @@ export class SDKLLMProvider implements LLMProvider {
     const pendingPerms = this.pendingPerms;
     const cliPath = this.cliPath;
     const autoApprove = this.autoApprove;
+    const groqApiKey = this.groqApiKey;
 
     return new ReadableStream({
       start(controller) {
@@ -238,7 +245,8 @@ export class SDKLLMProvider implements LLMProvider {
               queryOptions.pathToClaudeCodeExecutable = cliPath;
             }
 
-            const prompt = buildPrompt(params.prompt, params.files);
+            const transcribedPrompt = await transcribeAudioIfNeeded(params.prompt, groqApiKey);
+            const prompt = buildPrompt(transcribedPrompt, params.files);
             const q = query({
               prompt: prompt as Parameters<typeof query>[0]['prompt'],
               options: queryOptions as Parameters<typeof query>[0]['options'],
