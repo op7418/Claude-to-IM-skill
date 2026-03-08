@@ -163,6 +163,24 @@ Show results and suggest fixes for any failures. Common fixes:
 - dist/daemon.mjs stale → `cd SKILL_DIR && npm run build`
 - Config missing → run `setup`
 
+## Voice Messages (Speech-to-Text)
+
+Set `CTI_GROQ_API_KEY` in your `~/.claude-to-im/config.env` to enable automatic transcription of voice messages via [Groq Whisper](https://console.groq.com/keys):
+
+```
+CTI_GROQ_API_KEY=gsk_...
+```
+
+Supported formats: `.ogg` (Discord voice), `.mp3`, `.mp4`, `.wav`, `.m4a`, `.webm`, `.flac`
+
+Voice messages are transcribed before being forwarded to Claude Code. The transcript appears as:
+
+```
+[Voice message (transcribed): "Hello, can you help me with this code?"]
+```
+
+Without `CTI_GROQ_API_KEY`, voice messages fall through as local file path references (current behavior — no transcription).
+
 ## Notes
 
 - Always mask secrets in output (show only last 4 characters)
