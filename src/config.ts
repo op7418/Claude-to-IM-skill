@@ -107,7 +107,7 @@ export function loadConfig(): Config {
       ? Number(env.get("CTI_QQ_MAX_IMAGE_SIZE"))
       : undefined,
     autoApprove: env.get("CTI_AUTO_APPROVE") === "true",
-    groqApiKey: env.get('CTI_GROQ_API_KEY') || undefined,
+    groqApiKey: env.get("CTI_GROQ_API_KEY") || undefined,
   };
 }
 
@@ -162,7 +162,7 @@ export function saveConfig(config: Config): void {
     out += formatEnvLine("CTI_QQ_IMAGE_ENABLED", String(config.qqImageEnabled));
   if (config.qqMaxImageSize !== undefined)
     out += formatEnvLine("CTI_QQ_MAX_IMAGE_SIZE", String(config.qqMaxImageSize));
-  if (config.groqApiKey) out += formatEnvLine('CTI_GROQ_API_KEY', config.groqApiKey);
+  if (config.groqApiKey) out += formatEnvLine("CTI_GROQ_API_KEY", config.groqApiKey);
 
   fs.mkdirSync(CTI_HOME, { recursive: true });
   const tmpPath = CONFIG_PATH + ".tmp";

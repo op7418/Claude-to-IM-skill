@@ -168,6 +168,12 @@ describe('configToSettings', () => {
 
 describe('groq api key in config', () => {
   it('loadConfig reads CTI_GROQ_API_KEY from config file', () => {
+    // Safety guard: CONFIG_PATH must be inside a temp dir, not the user's real config.
+    // The npm test script sets CTI_HOME=$(mktemp -d) to ensure this.
+    assert.ok(
+      CONFIG_PATH.includes(os.tmpdir()) || CONFIG_PATH.includes('/tmp'),
+      `CONFIG_PATH must be in a temp dir during tests, got: ${CONFIG_PATH}`
+    );
     // CONFIG_PATH is the path loadConfig() reads from.
     // CTI_HOME is a fresh tmpdir (set by npm test script).
     // We write our key there, call loadConfig(), and assert.
