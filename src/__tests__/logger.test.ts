@@ -17,6 +17,12 @@ describe('maskSecrets', () => {
     assert.ok(!result.includes('my-secret-value'));
   });
 
+  it('masks botId=value patterns', () => {
+    const input = 'botId=aibot_1234567890';
+    const result = maskSecrets(input);
+    assert.ok(!result.includes('aibot_1234567890'));
+  });
+
   it('masks password=value patterns', () => {
     const input = 'password=hunter2abc';
     const result = maskSecrets(input);

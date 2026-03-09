@@ -3,7 +3,7 @@ import path from 'node:path';
 import { CTI_HOME } from './config.js';
 
 const MASK_PATTERNS: RegExp[] = [
-  /(?:token|secret|password|api_key)["']?\s*[:=]\s*["']?([^\s"',]+)/gi,
+  /(?:token|secret|password|api_key|botid|bot_id)["']?\s*[:=]\s*["']?([^\s"',]+)/gi,
   /bot\d+:[A-Za-z0-9_-]{35}/g,
   /Bearer\s+[A-Za-z0-9._-]+/g,
 ];

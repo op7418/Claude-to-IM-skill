@@ -55,6 +55,11 @@ function shouldPassModelToCodex(): boolean {
   return process.env.CTI_CODEX_PASS_MODEL === 'true';
 }
 
+/** Allow Codex to run in a non-git working directory. Default: false. */
+function shouldSkipGitRepoCheck(): boolean {
+  return process.env.CTI_CODEX_SKIP_GIT_REPO_CHECK === 'true';
+}
+
 function looksLikeClaudeModel(model?: string): boolean {
   return !!model && /^claude[-_]/i.test(model);
 }
@@ -135,10 +140,12 @@ export class CodexProvider implements LLMProvider {
 
             const approvalPolicy = toApprovalPolicy(params.permissionMode);
             const passModel = shouldPassModelToCodex();
+            const skipGitRepoCheck = shouldSkipGitRepoCheck();
 
             const threadOptions: Record<string, unknown> = {
               ...(passModel && params.model ? { model: params.model } : {}),
               ...(params.workingDirectory ? { workingDirectory: params.workingDirectory } : {}),
+              ...(skipGitRepoCheck ? { skipGitRepoCheck: true } : {}),
               approvalPolicy,
             };
 

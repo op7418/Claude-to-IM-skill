@@ -181,6 +181,34 @@ Leave empty to allow all users who can message the bot.
 
 ---
 
+## WeCom / Enterprise WeChat
+
+### Bot ID and Secret
+
+**How to create an Enterprise WeChat intelligent bot and get credentials:**
+1. Open Enterprise WeChat and go to **Workbench → Intelligent Bot**
+2. Click **Create Bot**
+3. Choose **API mode**
+4. Select **Long Connection**
+5. Copy the generated **Bot ID** and **Secret**
+
+### Optional access control
+
+- **Allowed User IDs**: comma-separated 企业微信 `userid` values. Leave empty to allow all direct-message senders.
+- **Group Policy**:
+  - `allowlist` — only process group chats listed in `CTI_WECOM_GROUP_ALLOW_FROM`
+  - `open` — allow all group chats the bot is in
+  - `disabled` — ignore group messages entirely
+- **Allowed Group IDs**: comma-separated Enterprise WeChat group chat IDs. Recommended when using `allowlist`.
+
+### Important notes
+
+- This channel uses the Enterprise WeChat **intelligent bot long-connection** gateway.
+- Permission approval uses text `/perm ...` commands, not inline buttons.
+- Group chats are safest with `CTI_WECOM_GROUP_POLICY=allowlist`.
+
+---
+
 ## QQ
 
 > **Note:** QQ first version only supports **C2C private chat** (sandbox access). Group chat and channel are not supported yet.

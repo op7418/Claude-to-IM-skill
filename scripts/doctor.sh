@@ -147,6 +147,29 @@ get_config() { grep "^$1=" "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d= -f2- |
 
 if [ -f "$CONFIG_FILE" ]; then
   CTI_CHANNELS=$(get_config CTI_ENABLED_CHANNELS)
+  CTI_DEFAULT_WORKDIR=$(get_config CTI_DEFAULT_WORKDIR)
+  CTI_CODEX_SKIP_GIT_REPO_CHECK=$(get_config CTI_CODEX_SKIP_GIT_REPO_CHECK)
+
+  if [ "$CTI_RUNTIME" = "codex" ] || [ "$CTI_RUNTIME" = "auto" ]; then
+    if [ -n "$CTI_DEFAULT_WORKDIR" ]; then
+      if [ -d "$CTI_DEFAULT_WORKDIR" ]; then
+        check "Default work directory exists" 0
+        if git -C "$CTI_DEFAULT_WORKDIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+          check "Default work directory is a Git repo" 0
+        else
+          if [ "${CTI_CODEX_SKIP_GIT_REPO_CHECK:-}" = "true" ]; then
+            check "Default work directory is non-git but skip check is enabled" 0
+          else
+            check "Default work directory is a Git repo (or set CTI_CODEX_SKIP_GIT_REPO_CHECK=true)" 1
+          fi
+        fi
+      else
+        check "Default work directory exists ($CTI_DEFAULT_WORKDIR)" 1
+      fi
+    else
+      check "Default work directory configured" 1
+    fi
+  fi
 
   # --- Telegram ---
   if echo "$CTI_CHANNELS" | grep -q telegram; then
@@ -207,6 +230,22 @@ if [ -f "$CONFIG_FILE" ]; then
       fi
     else
       check "QQ app credentials configured" 1
+    fi
+  fi
+
+  # --- WeCom ---
+  if echo "$CTI_CHANNELS" | grep -q wecom; then
+    WECOM_BOT_ID=$(get_config CTI_WECOM_BOT_ID)
+    WECOM_SECRET=$(get_config CTI_WECOM_SECRET)
+    if [ -d "$SKILL_DIR/node_modules/@wecom/aibot-node-sdk" ]; then
+      check "@wecom/aibot-node-sdk installed" 0
+    else
+      check "@wecom/aibot-node-sdk installed" 1
+    fi
+    if [ -n "$WECOM_BOT_ID" ] && [ -n "$WECOM_SECRET" ]; then
+      check "WeCom bot credentials configured" 0
+    else
+      check "WeCom bot credentials configured" 1
     fi
   fi
 

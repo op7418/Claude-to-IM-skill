@@ -1,7 +1,7 @@
 {
   "name": "claude-to-im-skill",
   "version": "0.1.0",
-  "description": "Claude Code Skill: Bridge IM platforms (Telegram, Discord, Feishu, QQ) to Claude Code sessions",
+  "description": "Claude Code Skill: Bridge IM platforms (Telegram, Discord, Feishu, WeCom, QQ) to Claude Code sessions",
   "type": "module",
   "scripts": {
     "build": "node scripts/build.js",
@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.62",
+    "@wecom/aibot-node-sdk": "^1.0.1",
     "claude-to-im": "github:op7418/claude-to-im"
   },
   "optionalDependencies": {

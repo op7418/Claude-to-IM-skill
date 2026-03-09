@@ -1,7 +1,7 @@
 ---
 name: claude-to-im
 description: |
-  Bridge THIS Claude Code session to Telegram, Discord, Feishu/Lark, or QQ so the
+  Bridge THIS Claude Code session to Telegram, Discord, Feishu/Lark, WeCom, or QQ so the
   user can chat with Claude from their phone. Use for: setting up, starting, stopping,
   or diagnosing the claude-to-im bridge daemon; forwarding Claude replies to a messaging
   app; any phrase like "claude-to-im", "bridge", "消息推送", "消息转发", "桥接",
@@ -76,10 +76,11 @@ When AskUserQuestion IS available, collect input **one field at a time**. After 
 
 **Step 1 — Choose channels**
 
-Ask which channels to enable (telegram, discord, feishu, qq). Accept comma-separated input. Briefly describe each:
+Ask which channels to enable (telegram, discord, feishu, wecom, qq). Accept comma-separated input. Briefly describe each:
 - **telegram** — Best for personal use. Streaming preview, inline permission buttons.
 - **discord** — Good for team use. Server/channel/user-level access control.
 - **feishu** (Lark) — For Feishu/Lark teams. Event-based messaging.
+- **wecom** — Enterprise WeChat intelligent bot. Long-connection mode, text `/perm ...` approval, optional group allowlist.
 - **qq** — QQ C2C private chat only. No inline permission buttons, no streaming preview. Permissions use text `/perm ...` commands.
 
 **Step 2 — Collect tokens per channel**
@@ -89,6 +90,13 @@ For each enabled channel, read `SKILL_DIR/references/setup-guides.md` and presen
 - **Telegram**: Bot Token → confirm (masked) → Chat ID (see guide for how to get it) → confirm → Allowed User IDs (optional). **Important:** At least one of Chat ID or Allowed User IDs must be set, otherwise the bot will reject all messages.
 - **Discord**: Bot Token → confirm (masked) → Allowed User IDs → Allowed Channel IDs (optional) → Allowed Guild IDs (optional). **Important:** At least one of Allowed User IDs or Allowed Channel IDs must be set, otherwise the bot will reject all messages (default-deny).
 - **Feishu**: App ID → confirm → App Secret → confirm (masked) → Domain (optional) → Allowed User IDs (optional). Guide through all 4 steps (A: batch permissions, B: enable bot, C: events & callbacks with long connection, D: publish version).
+- **WeCom**: Collect the required bot fields, then optional access controls:
+  1. WeCom Bot ID (required) → confirm
+  2. WeCom Secret (required) → confirm (masked)
+  3. Allowed User IDs (optional, press Enter to skip)
+  4. Group Policy (optional, default `allowlist`) — `allowlist`, `open`, or `disabled`
+  5. Allowed Group IDs (optional, used when Group Policy = `allowlist`)
+  - Remind user: WeCom uses the intelligent bot long-connection mode and text `/perm ...` approval.
 - **QQ**: Collect two required fields, then optional ones:
   1. QQ App ID (required) → confirm
   2. QQ App Secret (required) → confirm (masked)

@@ -44,6 +44,7 @@ describe('configToSettings', () => {
     assert.equal(m.get('bridge_telegram_enabled'), 'true');
     assert.equal(m.get('bridge_discord_enabled'), 'true');
     assert.equal(m.get('bridge_feishu_enabled'), 'false');
+    assert.equal(m.get('bridge_wecom_enabled'), 'false');
   });
 
   it('maps telegram config', () => {
@@ -126,6 +127,26 @@ describe('configToSettings', () => {
     assert.equal(m.get('bridge_qq_max_image_size'), '10');
   });
 
+  it('maps wecom config fields', () => {
+    const m = configToSettings({
+      ...base,
+      enabledChannels: ['wecom'],
+      wecomBotId: 'bot-id',
+      wecomSecret: 'bot-secret',
+      wecomAllowedUsers: ['u1', 'u2'],
+      wecomGroupPolicy: 'allowlist',
+      wecomGroupAllowFrom: ['group-1'],
+      wecomWsUrl: 'wss://openws.work.weixin.qq.com',
+    });
+    assert.equal(m.get('bridge_wecom_enabled'), 'true');
+    assert.equal(m.get('bridge_wecom_bot_id'), 'bot-id');
+    assert.equal(m.get('bridge_wecom_secret'), 'bot-secret');
+    assert.equal(m.get('bridge_wecom_allowed_users'), 'u1,u2');
+    assert.equal(m.get('bridge_wecom_group_policy'), 'allowlist');
+    assert.equal(m.get('bridge_wecom_group_allow_from'), 'group-1');
+    assert.equal(m.get('bridge_wecom_ws_url'), 'wss://openws.work.weixin.qq.com');
+  });
+
   it('omits qq image settings when not set', () => {
     const m = configToSettings({
       ...base,
@@ -193,5 +214,6 @@ describe('loadConfig/saveConfig round-trip', () => {
     assert.equal(m.get('bridge_discord_enabled'), 'false');
     assert.equal(m.get('bridge_feishu_enabled'), 'false');
     assert.equal(m.get('bridge_qq_enabled'), 'false');
+    assert.equal(m.get('bridge_wecom_enabled'), 'false');
   });
 });

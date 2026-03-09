@@ -8,6 +8,7 @@ export interface Config {
   defaultWorkDir: string;
   defaultModel?: string;
   defaultMode: string;
+  codexSkipGitRepoCheck?: boolean;
   // Telegram
   tgBotToken?: string;
   tgChatId?: string;
@@ -28,6 +29,13 @@ export interface Config {
   qqAllowedUsers?: string[];
   qqImageEnabled?: boolean;
   qqMaxImageSize?: number;
+  // WeCom
+  wecomBotId?: string;
+  wecomSecret?: string;
+  wecomAllowedUsers?: string[];
+  wecomGroupPolicy?: 'open' | 'allowlist' | 'disabled';
+  wecomGroupAllowFrom?: string[];
+  wecomWsUrl?: string;
   // Auto-approve all tool permission requests without user confirmation
   autoApprove?: boolean;
 }
@@ -82,6 +90,7 @@ export function loadConfig(): Config {
     defaultWorkDir: env.get("CTI_DEFAULT_WORKDIR") || process.cwd(),
     defaultModel: env.get("CTI_DEFAULT_MODEL") || undefined,
     defaultMode: env.get("CTI_DEFAULT_MODE") || "code",
+    codexSkipGitRepoCheck: env.get("CTI_CODEX_SKIP_GIT_REPO_CHECK") === "true",
     tgBotToken: env.get("CTI_TG_BOT_TOKEN") || undefined,
     tgChatId: env.get("CTI_TG_CHAT_ID") || undefined,
     tgAllowedUsers: splitCsv(env.get("CTI_TG_ALLOWED_USERS")),
@@ -104,6 +113,12 @@ export function loadConfig(): Config {
     qqMaxImageSize: env.get("CTI_QQ_MAX_IMAGE_SIZE")
       ? Number(env.get("CTI_QQ_MAX_IMAGE_SIZE"))
       : undefined,
+    wecomBotId: env.get("CTI_WECOM_BOT_ID") || undefined,
+    wecomSecret: env.get("CTI_WECOM_SECRET") || undefined,
+    wecomAllowedUsers: splitCsv(env.get("CTI_WECOM_ALLOWED_USERS")),
+    wecomGroupPolicy: (env.get("CTI_WECOM_GROUP_POLICY") || undefined) as Config["wecomGroupPolicy"],
+    wecomGroupAllowFrom: splitCsv(env.get("CTI_WECOM_GROUP_ALLOW_FROM")),
+    wecomWsUrl: env.get("CTI_WECOM_WS_URL") || undefined,
     autoApprove: env.get("CTI_AUTO_APPROVE") === "true",
   };
 }
@@ -123,6 +138,9 @@ export function saveConfig(config: Config): void {
   out += formatEnvLine("CTI_DEFAULT_WORKDIR", config.defaultWorkDir);
   if (config.defaultModel) out += formatEnvLine("CTI_DEFAULT_MODEL", config.defaultModel);
   out += formatEnvLine("CTI_DEFAULT_MODE", config.defaultMode);
+  if (config.codexSkipGitRepoCheck !== undefined) {
+    out += formatEnvLine("CTI_CODEX_SKIP_GIT_REPO_CHECK", String(config.codexSkipGitRepoCheck));
+  }
   out += formatEnvLine("CTI_TG_BOT_TOKEN", config.tgBotToken);
   out += formatEnvLine("CTI_TG_CHAT_ID", config.tgChatId);
   out += formatEnvLine(
@@ -159,6 +177,18 @@ export function saveConfig(config: Config): void {
     out += formatEnvLine("CTI_QQ_IMAGE_ENABLED", String(config.qqImageEnabled));
   if (config.qqMaxImageSize !== undefined)
     out += formatEnvLine("CTI_QQ_MAX_IMAGE_SIZE", String(config.qqMaxImageSize));
+  out += formatEnvLine("CTI_WECOM_BOT_ID", config.wecomBotId);
+  out += formatEnvLine("CTI_WECOM_SECRET", config.wecomSecret);
+  out += formatEnvLine(
+    "CTI_WECOM_ALLOWED_USERS",
+    config.wecomAllowedUsers?.join(",")
+  );
+  out += formatEnvLine("CTI_WECOM_GROUP_POLICY", config.wecomGroupPolicy);
+  out += formatEnvLine(
+    "CTI_WECOM_GROUP_ALLOW_FROM",
+    config.wecomGroupAllowFrom?.join(",")
+  );
+  out += formatEnvLine("CTI_WECOM_WS_URL", config.wecomWsUrl);
 
   fs.mkdirSync(CTI_HOME, { recursive: true });
   const tmpPath = CONFIG_PATH + ".tmp";
@@ -239,6 +269,21 @@ export function configToSettings(config: Config): Map<string, string> {
     m.set("bridge_qq_image_enabled", String(config.qqImageEnabled));
   if (config.qqMaxImageSize !== undefined)
     m.set("bridge_qq_max_image_size", String(config.qqMaxImageSize));
+
+  // ── WeCom ──
+  m.set(
+    "bridge_wecom_enabled",
+    config.enabledChannels.includes("wecom") ? "true" : "false"
+  );
+  if (config.wecomBotId) m.set("bridge_wecom_bot_id", config.wecomBotId);
+  if (config.wecomSecret) m.set("bridge_wecom_secret", config.wecomSecret);
+  if (config.wecomAllowedUsers)
+    m.set("bridge_wecom_allowed_users", config.wecomAllowedUsers.join(","));
+  if (config.wecomGroupPolicy)
+    m.set("bridge_wecom_group_policy", config.wecomGroupPolicy);
+  if (config.wecomGroupAllowFrom)
+    m.set("bridge_wecom_group_allow_from", config.wecomGroupAllowFrom.join(","));
+  if (config.wecomWsUrl) m.set("bridge_wecom_ws_url", config.wecomWsUrl);
 
   // ── Defaults ──
   // Upstream keys: bridge_default_work_dir, bridge_default_model, default_model

@@ -1,6 +1,6 @@
 # Claude-to-IM Skill
 
-将 Claude Code / Codex 桥接到 IM 平台 —— 在 Telegram、Discord、飞书或 QQ 中与 AI 编程代理对话。
+将 Claude Code / Codex 桥接到 IM 平台 —— 在 Telegram、Discord、飞书、企业微信或 QQ 中与 AI 编程代理对话。
 
 [English](README.md)
 
@@ -13,7 +13,7 @@
 本 Skill 运行一个后台守护进程，将你的 IM 机器人连接到 Claude Code 或 Codex 会话。来自 IM 的消息被转发给 AI 编程代理，响应（包括工具调用、权限请求、流式预览）会发回到聊天中。
 
 ```
-你 (Telegram/Discord/飞书/QQ)
+你 (Telegram/Discord/飞书/企业微信/QQ)
   ↕ Bot API
 后台守护进程 (Node.js)
   ↕ Claude Agent SDK 或 Codex SDK（通过 CTI_RUNTIME 配置）
@@ -22,9 +22,9 @@ Claude Code / Codex → 读写你的代码库
 
 ## 功能特点
 
-- **四大 IM 平台** — Telegram、Discord、飞书、QQ，可任意组合启用
+- **五大 IM 平台** — Telegram、Discord、飞书、企业微信、QQ，可任意组合启用
 - **交互式配置** — 引导式向导逐步收集 token，附带详细获取说明
-- **权限控制** — 工具调用需要在聊天中通过内联按钮（Telegram/Discord）或文本 `/perm` 命令（飞书/QQ）明确批准
+- **权限控制** — 工具调用需要在聊天中通过内联按钮（Telegram/Discord）或文本 `/perm` 命令（飞书/企业微信/QQ）明确批准
 - **流式预览** — 实时查看 Claude 的输出（Telegram 和 Discord 支持）
 - **会话持久化** — 对话在守护进程重启后保留
 - **密钥保护** — token 以 `chmod 600` 存储，日志中自动脱敏
@@ -97,7 +97,7 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 
 向导会引导你完成以下步骤：
 
-1. **选择渠道** — 选择 Telegram、Discord、飞书、QQ，或任意组合
+1. **选择渠道** — 选择 Telegram、Discord、飞书、企业微信、QQ，或任意组合
 2. **输入凭据** — 向导会详细说明如何获取每个 token、需要开启哪些设置、授予哪些权限
 3. **设置默认值** — 工作目录、模型、模式
 4. **验证** — 立即通过平台 API 验证 token 有效性
@@ -114,7 +114,7 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 
 打开 IM 应用，给你的机器人发消息，Claude Code 会回复。
 
-当 Claude 需要使用工具（编辑文件、运行命令）时，聊天中会弹出带有 **允许** / **拒绝** 按钮的权限请求（Telegram/Discord），或文本 `/perm` 命令提示（飞书/QQ）。
+当 Claude 需要使用工具（编辑文件、运行命令）时，聊天中会弹出带有 **允许** / **拒绝** 按钮的权限请求（Telegram/Discord），或文本 `/perm` 命令提示（飞书/企业微信/QQ）。
 
 ## 命令列表
 
@@ -159,6 +159,17 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 6. **发布**：进入"版本管理与发布" → 创建版本 → 提交审核 → 在管理后台审核通过
 7. **注意**：版本审核通过并发布后机器人才能使用
 
+### 企业微信
+
+> 企业微信使用**智能机器人长连接**模式。权限确认使用文本 `/perm ...` 命令。群聊可用，但推荐配合 `CTI_WECOM_GROUP_POLICY=allowlist` 按群白名单开放。
+
+1. 在企业微信中进入 **工作台 → 智能机器人 → 创建机器人**
+2. 选择 **API 模式**，并选择 **长连接**
+3. 复制生成的 **Bot ID** 和 **Secret**
+4. 配置 `CTI_WECOM_BOT_ID` 与 `CTI_WECOM_SECRET`
+5. 可选：通过 `CTI_WECOM_ALLOWED_USERS`、`CTI_WECOM_GROUP_ALLOW_FROM` 限制访问范围
+6. 保存机器人后，在企业微信里给它发消息即可开始对话
+
 ### QQ
 
 > QQ 目前仅支持 **C2C 私聊**（沙箱接入）。不支持群聊/频道、内联权限按钮、流式预览。权限确认使用文本 `/perm ...` 命令。仅支持图片入站（不支持图片回复）。
@@ -195,6 +206,7 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 | `src/store.ts` | JSON 文件 BridgeStore（30 个方法，写穿缓存） |
 | `src/llm-provider.ts` | Claude Agent SDK `query()` → SSE 流 |
 | `src/codex-provider.ts` | Codex SDK `runStreamed()` → SSE 流 |
+| `src/wecom-adapter.ts` | 企业微信智能机器人长连接适配器 |
 | `src/sse-utils.ts` | 共享的 SSE 格式化辅助函数 |
 | `src/permission-gateway.ts` | 异步桥接：SDK `canUseTool` ↔ IM 按钮 |
 | `src/logger.ts` | 密钥脱敏的文件日志，支持轮转 |

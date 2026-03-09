@@ -1,6 +1,6 @@
 # Claude-to-IM Skill
 
-Bridge Claude Code / Codex to IM platforms — chat with AI coding agents from Telegram, Discord, Feishu/Lark, or QQ.
+Bridge Claude Code / Codex to IM platforms — chat with AI coding agents from Telegram, Discord, Feishu/Lark, WeCom, or QQ.
 
 [中文文档](README_CN.md)
 
@@ -13,7 +13,7 @@ Bridge Claude Code / Codex to IM platforms — chat with AI coding agents from T
 This skill runs a background daemon that connects your IM bots to Claude Code or Codex sessions. Messages from IM are forwarded to the AI coding agent, and responses (including tool use, permission requests, streaming previews) are sent back to your chat.
 
 ```
-You (Telegram/Discord/Feishu/QQ)
+You (Telegram/Discord/Feishu/WeCom/QQ)
   ↕ Bot API
 Background Daemon (Node.js)
   ↕ Claude Agent SDK or Codex SDK (configurable via CTI_RUNTIME)
@@ -22,9 +22,9 @@ Claude Code / Codex → reads/writes your codebase
 
 ## Features
 
-- **Four IM platforms** — Telegram, Discord, Feishu/Lark, QQ — enable any combination
+- **Five IM platforms** — Telegram, Discord, Feishu/Lark, WeCom, QQ — enable any combination
 - **Interactive setup** — guided wizard collects tokens with step-by-step instructions
-- **Permission control** — tool calls require explicit approval via inline buttons (Telegram/Discord) or text `/perm` commands (Feishu/QQ)
+- **Permission control** — tool calls require explicit approval via inline buttons (Telegram/Discord) or text `/perm` commands (Feishu/WeCom/QQ)
 - **Streaming preview** — see Claude's response as it types (Telegram & Discord)
 - **Session persistence** — conversations survive daemon restarts
 - **Secret protection** — tokens stored with `chmod 600`, auto-redacted in all logs
@@ -97,7 +97,7 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 
 The wizard will guide you through:
 
-1. **Choose channels** — pick Telegram, Discord, Feishu, QQ, or any combination
+1. **Choose channels** — pick Telegram, Discord, Feishu, WeCom, QQ, or any combination
 2. **Enter credentials** — the wizard explains exactly where to get each token, which settings to enable, and what permissions to grant
 3. **Set defaults** — working directory, model, and mode
 4. **Validate** — tokens are verified against platform APIs immediately
@@ -114,7 +114,7 @@ The daemon starts in the background. You can close the terminal — it keeps run
 
 Open your IM app and send a message to your bot. Claude Code will respond.
 
-When Claude needs to use a tool (edit a file, run a command), you'll see a permission prompt with **Allow** / **Deny** buttons right in the chat (Telegram/Discord), or a text `/perm` command prompt (Feishu/QQ).
+When Claude needs to use a tool (edit a file, run a command), you'll see a permission prompt with **Allow** / **Deny** buttons right in the chat (Telegram/Discord), or a text `/perm` command prompt (Feishu/WeCom/QQ).
 
 ## Commands
 
@@ -159,6 +159,17 @@ The `setup` wizard provides inline guidance for every step. Here's a summary:
 6. **Publish**: go to "Version Management & Release" → create version → submit for review → approve in Admin Console
 7. **Important**: The bot will NOT work until the version is approved and published
 
+### WeCom / Enterprise WeChat
+
+> WeCom uses the **intelligent bot long-connection** channel. Permissions use text `/perm ...` commands. Group chat is supported, but it is safest to enable it with `CTI_WECOM_GROUP_POLICY=allowlist`.
+
+1. In Enterprise WeChat, go to **Workbench → Intelligent Bot → Create Bot**
+2. Choose **API mode** and select **Long Connection**
+3. Copy the generated **Bot ID** and **Secret**
+4. Set `CTI_WECOM_BOT_ID` and `CTI_WECOM_SECRET`
+5. Optionally restrict access with `CTI_WECOM_ALLOWED_USERS` and `CTI_WECOM_GROUP_ALLOW_FROM`
+6. Save the bot, then send it a message in Enterprise WeChat to start chatting
+
 ### QQ
 
 > QQ currently supports **C2C private chat only**. No group/channel support, no inline permission buttons, no streaming preview. Permissions use text `/perm ...` commands. Image inbound only (no image replies).
@@ -195,6 +206,7 @@ The `setup` wizard provides inline guidance for every step. Here's a summary:
 | `src/store.ts` | JSON file BridgeStore (30 methods, write-through cache) |
 | `src/llm-provider.ts` | Claude Agent SDK `query()` → SSE stream |
 | `src/codex-provider.ts` | Codex SDK `runStreamed()` → SSE stream |
+| `src/wecom-adapter.ts` | WeCom intelligent bot long-connection adapter |
 | `src/sse-utils.ts` | Shared SSE formatting helper |
 | `src/permission-gateway.ts` | Async bridge: SDK `canUseTool` ↔ IM buttons |
 | `src/logger.ts` | Secret-redacted file logging with rotation |
