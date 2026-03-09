@@ -15,10 +15,20 @@ ensure_built() {
   if [ ! -f "$SKILL_DIR/dist/daemon.mjs" ]; then
     need_build=1
   else
+    # Check if any source file is newer than the bundle
     local newest_src
     newest_src=$(find "$SKILL_DIR/src" -name '*.ts' -newer "$SKILL_DIR/dist/daemon.mjs" 2>/dev/null | head -1)
     if [ -n "$newest_src" ]; then
       need_build=1
+    fi
+    # Also check if node_modules/claude-to-im was updated (npm update)
+    # — its code is bundled into dist, so changes require a rebuild
+    if [ "$need_build" = "0" ] && [ -d "$SKILL_DIR/node_modules/claude-to-im/src" ]; then
+      local newest_dep
+      newest_dep=$(find "$SKILL_DIR/node_modules/claude-to-im/src" -name '*.ts' -newer "$SKILL_DIR/dist/daemon.mjs" 2>/dev/null | head -1)
+      if [ -n "$newest_dep" ]; then
+        need_build=1
+      fi
     fi
   fi
   if [ "$need_build" = "1" ]; then
