@@ -21,6 +21,7 @@ import { JsonFileStore } from './store.js';
 import { SDKLLMProvider, resolveClaudeCliPath } from './llm-provider.js';
 import { PendingPermissions } from './permission-gateway.js';
 import { setupLogger } from './logger.js';
+import { startMobileCommandProcessor } from './mobile-control.js';
 
 const RUNTIME_DIR = path.join(CTI_HOME, 'runtime');
 const STATUS_FILE = path.join(RUNTIME_DIR, 'status.json');
@@ -97,6 +98,7 @@ async function main(): Promise<void> {
   const store = new JsonFileStore(settings);
   const pendingPerms = new PendingPermissions();
   const llm = await resolveProvider(config, pendingPerms);
+  const stopMobileCommandProcessor = startMobileCommandProcessor(store);
   console.log(`[claude-to-im] Runtime: ${config.runtime}`);
 
   const gateway = {
@@ -139,6 +141,7 @@ async function main(): Promise<void> {
     const reason = signal ? `signal: ${signal}` : 'shutdown requested';
     console.log(`[claude-to-im] Shutting down (${reason})...`);
     pendingPerms.denyAll();
+    stopMobileCommandProcessor();
     await bridgeManager.stop();
     writeStatus({ running: false, lastExitReason: reason });
     process.exit(0);

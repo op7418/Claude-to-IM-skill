@@ -25,6 +25,26 @@ import { CTI_HOME } from './config.js';
 const DATA_DIR = path.join(CTI_HOME, 'data');
 const MESSAGES_DIR = path.join(DATA_DIR, 'messages');
 
+export interface RuntimeSessionBinding {
+  runtimeSessionKey: string;
+  runtime: 'codex' | 'claude';
+  nativeSessionId: string;
+  codepilotSessionId: string;
+  workingDirectory: string;
+  model: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertRuntimeSessionBindingInput {
+  runtimeSessionKey: string;
+  runtime: 'codex' | 'claude';
+  nativeSessionId: string;
+  codepilotSessionId: string;
+  workingDirectory: string;
+  model: string;
+}
+
 // ── Helpers ──
 
 function ensureDir(dir: string): void {
@@ -72,6 +92,7 @@ export class JsonFileStore implements BridgeStore {
   private settings: Map<string, string>;
   private sessions = new Map<string, BridgeSession>();
   private bindings = new Map<string, ChannelBinding>();
+  private runtimeSessions = new Map<string, RuntimeSessionBinding>();
   private messages = new Map<string, BridgeMessage[]>();
   private permissionLinks = new Map<string, PermissionLinkRecord>();
   private offsets = new Map<string, string>();
@@ -105,6 +126,15 @@ export class JsonFileStore implements BridgeStore {
     );
     for (const [key, b] of Object.entries(bindings)) {
       this.bindings.set(key, b);
+    }
+
+    // Runtime session bindings
+    const runtimeSessions = readJson<Record<string, RuntimeSessionBinding>>(
+      path.join(DATA_DIR, 'runtime-sessions.json'),
+      {},
+    );
+    for (const [key, binding] of Object.entries(runtimeSessions)) {
+      this.runtimeSessions.set(key, binding);
     }
 
     // Permission links
@@ -149,6 +179,13 @@ export class JsonFileStore implements BridgeStore {
     writeJson(
       path.join(DATA_DIR, 'bindings.json'),
       Object.fromEntries(this.bindings),
+    );
+  }
+
+  private persistRuntimeSessions(): void {
+    writeJson(
+      path.join(DATA_DIR, 'runtime-sessions.json'),
+      Object.fromEntries(this.runtimeSessions),
     );
   }
 
@@ -253,6 +290,38 @@ export class JsonFileStore implements BridgeStore {
     const all = Array.from(this.bindings.values());
     if (!channelType) return all;
     return all.filter((b) => b.channelType === channelType);
+  }
+
+  getRuntimeSessionBinding(runtimeSessionKey: string): RuntimeSessionBinding | null {
+    return this.runtimeSessions.get(runtimeSessionKey) ?? null;
+  }
+
+  upsertRuntimeSessionBinding(data: UpsertRuntimeSessionBindingInput): RuntimeSessionBinding {
+    const existing = this.runtimeSessions.get(data.runtimeSessionKey);
+    const record: RuntimeSessionBinding = existing
+      ? {
+          ...existing,
+          runtime: data.runtime,
+          nativeSessionId: data.nativeSessionId,
+          codepilotSessionId: data.codepilotSessionId,
+          workingDirectory: data.workingDirectory,
+          model: data.model,
+          updatedAt: now(),
+        }
+      : {
+          runtimeSessionKey: data.runtimeSessionKey,
+          runtime: data.runtime,
+          nativeSessionId: data.nativeSessionId,
+          codepilotSessionId: data.codepilotSessionId,
+          workingDirectory: data.workingDirectory,
+          model: data.model,
+          createdAt: now(),
+          updatedAt: now(),
+        };
+
+    this.runtimeSessions.set(data.runtimeSessionKey, record);
+    this.persistRuntimeSessions();
+    return record;
   }
 
   // ── Sessions ──

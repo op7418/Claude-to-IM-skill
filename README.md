@@ -116,6 +116,14 @@ Open your IM app and send a message to your bot. Claude Code will respond.
 
 When Claude needs to use a tool (edit a file, run a command), you'll see a permission prompt with **Allow** / **Deny** buttons right in the chat (Telegram/Discord), or a text `/perm` command prompt (Feishu/WeCom/QQ).
 
+### 4. Move the current session to mobile
+
+```
+/claude-to-im mobile
+```
+
+This lists previously connected chats and lets you bind the **current Claude Code / Codex session** to one of them. After binding, continue the same session from that IM chat.
+
 ## Commands
 
 All commands are run inside Claude Code or Codex:
@@ -123,6 +131,7 @@ All commands are run inside Claude Code or Codex:
 | Claude Code | Codex (natural language) | Description |
 |---|---|---|
 | `/claude-to-im setup` | "claude-to-im setup" / "配置" | Interactive setup wizard |
+| `/claude-to-im mobile` | "mobile" / "连接到手机" | Bind the current session to an existing IM chat |
 | `/claude-to-im start` | "start bridge" / "启动桥接" | Start the bridge daemon |
 | `/claude-to-im stop` | "stop bridge" / "停止桥接" | Stop the bridge daemon |
 | `/claude-to-im status` | "bridge status" / "状态" | Show daemon status |

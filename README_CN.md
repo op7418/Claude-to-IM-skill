@@ -116,6 +116,14 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 
 当 Claude 需要使用工具（编辑文件、运行命令）时，聊天中会弹出带有 **允许** / **拒绝** 按钮的权限请求（Telegram/Discord），或文本 `/perm` 命令提示（飞书/企业微信/QQ）。
 
+### 4. 把当前会话接到手机
+
+```
+/claude-to-im mobile
+```
+
+该命令会列出已经连接过的 IM chat，并允许你把**当前 Claude Code / Codex 会话**绑定到其中一个 chat。绑定成功后，就可以直接在那个 IM chat 里继续同一个 session。
+
 ## 命令列表
 
 所有命令在 Claude Code 或 Codex 中执行：
@@ -123,6 +131,7 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 | Claude Code | Codex（自然语言） | 说明 |
 |---|---|---|
 | `/claude-to-im setup` | "claude-to-im setup" / "配置" | 交互式配置向导 |
+| `/claude-to-im mobile` | "mobile" / "连接到手机" | 将当前会话绑定到已有 IM chat |
 | `/claude-to-im start` | "start bridge" / "启动桥接" | 启动桥接守护进程 |
 | `/claude-to-im stop` | "stop bridge" / "停止桥接" | 停止守护进程 |
 | `/claude-to-im status` | "bridge status" / "状态" | 查看运行状态 |

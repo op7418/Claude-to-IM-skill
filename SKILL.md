@@ -3,13 +3,14 @@ name: claude-to-im
 description: |
   Bridge THIS Claude Code session to Telegram, Discord, Feishu/Lark, WeCom, or QQ so the
   user can chat with Claude from their phone. Use for: setting up, starting, stopping,
-  or diagnosing the claude-to-im bridge daemon; forwarding Claude replies to a messaging
+  diagnosing the claude-to-im bridge daemon, or linking the current session to a mobile chat;
+  forwarding Claude replies to a messaging
   app; any phrase like "claude-to-im", "bridge", "消息推送", "消息转发", "桥接",
-  "连上飞书", "手机上看claude", "启动后台服务", "诊断", "查看日志", "配置".
-  Subcommands: setup, start, stop, status, logs, reconfigure, doctor.
+  "连上飞书", "手机上看claude", "启动后台服务", "诊断", "查看日志", "配置", "mobile", "连接到手机".
+  Subcommands: setup, mobile, start, stop, status, logs, reconfigure, doctor.
   Do NOT use for: building standalone bots, webhook integrations, or coding with IM
   platform SDKs — those are regular programming tasks.
-argument-hint: "setup | start | stop | status | logs [N] | reconfigure | doctor"
+argument-hint: "setup | mobile [selector] [--force] | start | stop | status | logs [N] | reconfigure | doctor"
 allowed-tools:
   - Bash
   - Read
@@ -35,6 +36,7 @@ Parse the user's intent from `$ARGUMENTS` into one of these subcommands:
 | User says (examples) | Subcommand |
 |---|---|
 | `setup`, `configure`, `配置`, `我想在飞书上用 Claude`, `帮我连接 Telegram` | setup |
+| `mobile`, `连到手机`, `连接到 IM`, `把当前会话连到手机`, `open mobile chat` | mobile |
 | `start`, `start bridge`, `启动`, `启动桥接` | start |
 | `stop`, `stop bridge`, `停止`, `停止桥接` | stop |
 | `status`, `bridge status`, `状态`, `运行状态`, `怎么看桥接的运行状态` | status |
@@ -44,7 +46,7 @@ Parse the user's intent from `$ARGUMENTS` into one of these subcommands:
 
 **Disambiguation: `status` vs `doctor`** — Use `status` when the user just wants to check if the bridge is running (informational). Use `doctor` when the user reports a problem or suspects something is broken (diagnostic). When in doubt and the user describes a symptom (e.g., "没反应了", "挂了"), prefer `doctor`.
 
-Extract optional numeric argument for `logs` (default 50).
+Extract optional numeric argument for `logs` (default 50). For `mobile`, extract an optional selector (`1`, `2`, or `channelType:chatId`) and an optional overwrite flag (`--force` or `force`).
 
 Before asking users for any platform credentials, first read `SKILL_DIR/references/setup-guides.md` to get the detailed step-by-step guidance for that platform. Present the relevant guide text to the user via AskUserQuestion — users often don't know where to find bot tokens or app secrets, so showing the guide upfront saves back-and-forth.
 
@@ -57,7 +59,7 @@ Before executing any subcommand, detect which environment you are running in:
 
 You can test this by checking if AskUserQuestion is in your available tools list.
 
-## Config check (applies to `start`, `stop`, `status`, `logs`, `reconfigure`, `doctor`)
+## Config check (applies to `mobile`, `start`, `stop`, `status`, `logs`, `reconfigure`, `doctor`)
 
 Before running any subcommand other than `setup`, check if `~/.claude-to-im/config.env` exists:
 
@@ -128,11 +130,40 @@ Ask for runtime, default working directory, model, and mode:
 7. Report results with a summary table. If any validation fails, explain what might be wrong and how to fix it.
 8. On success, tell the user: "Setup complete! Run `/claude-to-im start` to start the bridge."
 
+### `mobile`
+
+Link the **current Claude Code / Codex session** to an existing IM chat so the user can continue in that mobile chat without starting a fresh bridge session.
+
+**Pre-checks**
+1. Verify `~/.claude-to-im/config.env` exists (see "Config check" above).
+2. Ensure the bridge daemon is running. If not, run: `bash "$SKILL_DIR/scripts/daemon.sh" start`
+3. Use the helper CLI for all list/connect operations:
+   - List chats: `"$SKILL_DIR/node_modules/.bin/tsx" "$SKILL_DIR/scripts/mobile.ts" list --json`
+   - Connect: `"$SKILL_DIR/node_modules/.bin/tsx" "$SKILL_DIR/scripts/mobile.ts" connect <selector> [--force] --json`
+
+**Selection flow**
+1. Run the `list --json` helper first.
+2. If there are no candidates, tell the user to send a message from the target IM chat first, then rerun `/claude-to-im mobile`.
+3. If the user did **not** provide a selector:
+   - In Claude Code: use AskUserQuestion to let them choose from the numbered candidates.
+   - In Codex: show the numbered list and ask them to rerun `/claude-to-im mobile <number>` or `/claude-to-im mobile <channelType:chatId>`.
+4. If the user **did** provide a selector, run `connect`.
+
+**Overwrite flow**
+1. If `connect --json` returns `requires_confirmation`:
+   - In Claude Code: ask whether to overwrite the existing binding, then rerun with `--force` if confirmed.
+   - In Codex: show the exact rerun command with `--force`.
+2. If it returns `connected` or `already_connected`, tell the user which chat is now linked and whether the confirmation message was sent to the IM side.
+
+**Current-session requirement**
+- This command only works when the runtime exposes a live session identifier (for example `CODEX_THREAD_ID` in Codex).
+- If the helper reports that the current session ID is unavailable, explain that the runtime cannot safely hand off the live session yet.
+
 ### `start`
 
 **Pre-check:** Verify `~/.claude-to-im/config.env` exists (see "Config check" above). Without it, the daemon will crash immediately and leave a stale PID file.
 
-Run: `bash "SKILL_DIR/scripts/daemon.sh" start`
+Run: `bash "$SKILL_DIR/scripts/daemon.sh" start`
 
 Show the output to the user. If it fails, tell the user:
 - Run `doctor` to diagnose: `/claude-to-im doctor`
@@ -140,16 +171,16 @@ Show the output to the user. If it fails, tell the user:
 
 ### `stop`
 
-Run: `bash "SKILL_DIR/scripts/daemon.sh" stop`
+Run: `bash "$SKILL_DIR/scripts/daemon.sh" stop`
 
 ### `status`
 
-Run: `bash "SKILL_DIR/scripts/daemon.sh" status`
+Run: `bash "$SKILL_DIR/scripts/daemon.sh" status`
 
 ### `logs`
 
 Extract optional line count N from arguments (default 50).
-Run: `bash "SKILL_DIR/scripts/daemon.sh" logs N`
+Run: `bash "$SKILL_DIR/scripts/daemon.sh" logs N`
 
 ### `reconfigure`
 
@@ -163,11 +194,11 @@ Run: `bash "SKILL_DIR/scripts/daemon.sh" logs N`
 
 ### `doctor`
 
-Run: `bash "SKILL_DIR/scripts/doctor.sh"`
+Run: `bash "$SKILL_DIR/scripts/doctor.sh"`
 
 Show results and suggest fixes for any failures. Common fixes:
-- SDK cli.js missing → `cd SKILL_DIR && npm install`
-- dist/daemon.mjs stale → `cd SKILL_DIR && npm run build`
+- SDK cli.js missing → `cd "$SKILL_DIR" && npm install`
+- dist/daemon.mjs stale → `cd "$SKILL_DIR" && npm run build`
 - Config missing → run `setup`
 
 For more complex issues (messages not received, permission timeouts, high memory, stale PID files), read `SKILL_DIR/references/troubleshooting.md` for detailed diagnosis steps.
