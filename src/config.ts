@@ -166,6 +166,70 @@ export function saveConfig(config: Config): void {
   fs.renameSync(tmpPath, CONFIG_PATH);
 }
 
+export interface ConfigValidationError {
+  field: string;
+  message: string;
+}
+
+/**
+ * Validate config before daemon start.
+ * Returns a list of errors; empty array means config is valid.
+ */
+export function validateConfig(config: Config): ConfigValidationError[] {
+  const errors: ConfigValidationError[] = [];
+
+  if (config.enabledChannels.length === 0) {
+    errors.push({
+      field: 'CTI_ENABLED_CHANNELS',
+      message: 'At least one channel must be enabled (telegram, discord, feishu, qq)',
+    });
+  }
+
+  if (config.enabledChannels.includes('telegram')) {
+    if (!config.tgBotToken) {
+      errors.push({ field: 'CTI_TG_BOT_TOKEN', message: 'Required when telegram is enabled' });
+    }
+    if (!config.tgChatId && !config.tgAllowedUsers?.length) {
+      errors.push({
+        field: 'CTI_TG_CHAT_ID / CTI_TG_ALLOWED_USERS',
+        message: 'At least one is required for Telegram (otherwise all messages are rejected)',
+      });
+    }
+  }
+
+  if (config.enabledChannels.includes('feishu')) {
+    if (!config.feishuAppId) {
+      errors.push({ field: 'CTI_FEISHU_APP_ID', message: 'Required when feishu is enabled' });
+    }
+    if (!config.feishuAppSecret) {
+      errors.push({ field: 'CTI_FEISHU_APP_SECRET', message: 'Required when feishu is enabled' });
+    }
+  }
+
+  if (config.enabledChannels.includes('discord')) {
+    if (!config.discordBotToken) {
+      errors.push({ field: 'CTI_DISCORD_BOT_TOKEN', message: 'Required when discord is enabled' });
+    }
+    if (!config.discordAllowedUsers?.length && !config.discordAllowedChannels?.length) {
+      errors.push({
+        field: 'CTI_DISCORD_ALLOWED_USERS / CTI_DISCORD_ALLOWED_CHANNELS',
+        message: 'At least one is required for Discord (otherwise all messages are rejected)',
+      });
+    }
+  }
+
+  if (config.enabledChannels.includes('qq')) {
+    if (!config.qqAppId) {
+      errors.push({ field: 'CTI_QQ_APP_ID', message: 'Required when qq is enabled' });
+    }
+    if (!config.qqAppSecret) {
+      errors.push({ field: 'CTI_QQ_APP_SECRET', message: 'Required when qq is enabled' });
+    }
+  }
+
+  return errors;
+}
+
 export function maskSecret(value: string): string {
   if (value.length <= 4) return "****";
   return "*".repeat(value.length - 4) + value.slice(-4);

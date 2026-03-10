@@ -6,6 +6,8 @@ const MASK_PATTERNS: RegExp[] = [
   /(?:token|secret|password|api_key)["']?\s*[:=]\s*["']?([^\s"',]+)/gi,
   /bot\d+:[A-Za-z0-9_-]{35}/g,
   /Bearer\s+[A-Za-z0-9._-]+/g,
+  // OpenAI / Anthropic / third-party API keys (sk-...)
+  /sk-[A-Za-z0-9]{20,}/g,
 ];
 
 export function maskSecrets(text: string): string {
@@ -65,7 +67,11 @@ export function setupLogger(): void {
 
   const write = (level: string, args: unknown[]) => {
     const timestamp = new Date().toISOString();
-    const message = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+    const message = args.map((a) => {
+      if (typeof a === 'string') return a;
+      if (a instanceof Error) return a.stack ?? a.message;
+      return JSON.stringify(a);
+    }).join(' ');
     const formatted = `[${timestamp}] [${level}] ${message}`;
     const masked = maskSecrets(formatted);
 
