@@ -168,6 +168,7 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 3. 配置沙箱接入，用 QQ 扫码添加机器人
 4. `CTI_QQ_ALLOWED_USERS` 填写 `user_openid`（不是 QQ 号）— 可先留空
 5. 如果底层 provider 不支持图片输入，设置 `CTI_QQ_IMAGE_ENABLED=false`
+
 ### 钉钉
 
 1. 前往[钉钉开放平台](https://open-dev.dingtalk.com/) → 应用开发 → 企业内部开发 → 创建应用
