@@ -35,6 +35,30 @@ describe('PendingPermissions', () => {
     assert.equal(pp.resolve('req-3', { behavior: 'allow' }), true);
   });
 
+  it('passes updatedPermissions through allow resolutions', async () => {
+    const pp = new PendingPermissions();
+    const promise = pp.waitFor('req-4');
+
+    pp.resolve('req-4', {
+      behavior: 'allow',
+      updatedPermissions: [{
+        type: 'addRules',
+        behavior: 'allow',
+        destination: 'localSettings',
+        rules: [{ toolName: 'Bash', ruleContent: 'echo test' }],
+      }],
+    });
+
+    const result = await promise;
+    assert.equal(result.behavior, 'allow');
+    assert.deepEqual(result.updatedPermissions, [{
+      type: 'addRules',
+      behavior: 'allow',
+      destination: 'localSettings',
+      rules: [{ toolName: 'Bash', ruleContent: 'echo test' }],
+    }]);
+  });
+
   it('denyAll resolves all pending', async () => {
     const pp = new PendingPermissions();
     const p1 = pp.waitFor('req-a');

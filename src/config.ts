@@ -224,8 +224,8 @@ export function configToSettings(config: Config): Map<string, string> {
   // ── DingTalk ──
   // Upstream keys: bridge_dingtalk_client_id, bridge_dingtalk_client_secret,
   //   bridge_dingtalk_robot_code, bridge_dingtalk_enabled,
-  //   bridge_dingtalk_allowed_users, bridge_dingtalk_allowed_groups,
-  //   bridge_dingtalk_require_mention
+  //   bridge_dingtalk_allowed_users, bridge_dingtalk_group_policy,
+  //   bridge_dingtalk_group_allow_from, bridge_dingtalk_require_mention
   m.set(
     "bridge_dingtalk_enabled",
     config.enabledChannels.includes("dingtalk") ? "true" : "false"
@@ -241,8 +241,12 @@ export function configToSettings(config: Config): Map<string, string> {
   m.set("bridge_dingtalk_require_mention", "true");
   if (config.dingtalkAllowedUsers)
     m.set("bridge_dingtalk_allowed_users", config.dingtalkAllowedUsers.join(","));
+  m.set(
+    "bridge_dingtalk_group_policy",
+    config.dingtalkAllowedGroups && config.dingtalkAllowedGroups.length > 0 ? "allowlist" : "open"
+  );
   if (config.dingtalkAllowedGroups)
-    m.set("bridge_dingtalk_allowed_groups", config.dingtalkAllowedGroups.join(","));
+    m.set("bridge_dingtalk_group_allow_from", config.dingtalkAllowedGroups.join(","));
 
   // ── Defaults ──
   // Upstream keys: bridge_default_work_dir, bridge_default_model, default_model

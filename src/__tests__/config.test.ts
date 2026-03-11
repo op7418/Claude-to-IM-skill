@@ -106,7 +106,8 @@ describe('configToSettings', () => {
     assert.equal(m.get('bridge_dingtalk_robot_code'), 'dt-robot');
     assert.equal(m.get('bridge_dingtalk_require_mention'), 'true');
     assert.equal(m.get('bridge_dingtalk_allowed_users'), 'staff1,staff2');
-    assert.equal(m.get('bridge_dingtalk_allowed_groups'), 'cid123');
+    assert.equal(m.get('bridge_dingtalk_group_policy'), 'allowlist');
+    assert.equal(m.get('bridge_dingtalk_group_allow_from'), 'cid123');
   });
 
   it('uses client_id as robot_code when robot_code not set', () => {
@@ -176,4 +177,7 @@ describe('loadConfig/saveConfig round-trip', () => {
     assert.equal(m.get('bridge_discord_enabled'), 'false');
     assert.equal(m.get('bridge_feishu_enabled'), 'false');
     assert.equal(m.get('bridge_dingtalk_enabled'), 'false');
+    assert.equal(m.get('bridge_dingtalk_group_policy'), 'open');
+    assert.equal(m.has('bridge_dingtalk_group_allow_from'), false);
+  });
 });
