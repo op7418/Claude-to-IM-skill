@@ -155,7 +155,7 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 2. 创建自建应用 → 获取 App ID 和 App Secret
 3. **批量添加权限**：进入"权限管理" → 使用批量配置添加所有必需权限（`setup` 向导提供完整 JSON）
 4. 在"添加应用能力"中启用机器人
-5. **事件与回调**：选择**长连接**作为事件订阅方式 → 添加 `im.message.receive_v1` 事件
+5. **事件与回调**：选择**长连接**作为事件订阅方式，必须确保本地客户端启动正常，且[使用长连接接收事件](https://open.feishu.cn/document/server-docs/event-subscription-guide/event-subscription-configure-/request-url-configuration-case)的情况下，才能保存成功。 → 添加 `im.message.receive_v1` 事件
 6. **发布**：进入"版本管理与发布" → 创建版本 → 提交审核 → 在管理后台审核通过
 7. **注意**：版本审核通过并发布后机器人才能使用
 
