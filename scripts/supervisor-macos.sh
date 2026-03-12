@@ -54,6 +54,17 @@ build_env_dict() {
       ;;
   esac
 
+  # Forward proxy vars if set — needed when the daemon runs behind a corporate
+  # proxy or GFW firewall.  launchd creates a clean environment, so proxy vars
+  # from the interactive shell are NOT inherited automatically.  We only add an
+  # entry when the variable is actually set (the `[ -z "$val" ]` guard), so
+  # users without a proxy are completely unaffected.
+  for var in HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY no_proxy ALL_PROXY all_proxy; do
+    local val="${!var:-}"
+    [ -z "$val" ] && continue
+    dict+="${indent}<key>${var}</key>\n${indent}<string>${val}</string>\n"
+  done
+
   echo -e "$dict"
 }
 

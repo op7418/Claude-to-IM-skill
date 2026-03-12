@@ -13,7 +13,8 @@ export class PendingPermissions {
     resolve: (r: PermissionResult) => void;
     timer: NodeJS.Timeout;
   }>();
-  private timeoutMs = 5 * 60 * 1000; // 5 minutes
+  // Default 5 minutes; override with CTI_PERMISSION_TIMEOUT_MS (milliseconds).
+  private timeoutMs = parseInt(process.env['CTI_PERMISSION_TIMEOUT_MS'] ?? '300000', 10);
 
   waitFor(toolUseID: string): Promise<PermissionResult> {
     return new Promise((resolve) => {
