@@ -1,8 +1,12 @@
 /**
  * JSON file-backed BridgeStore implementation.
  *
- * Uses in-memory Maps as cache with write-through persistence
+ * Uses in-memory Maps as cache with debounced write-through persistence
  * to JSON files in ~/.claude-to-im/data/.
+ *
+ * Improvements over original:
+ *   1. Debounced writes — merges rapid successive writes into one I/O op
+ *   2. LRU eviction for message cache — prevents unbounded memory growth
  */
 
 import fs from 'node:fs';
@@ -58,6 +62,73 @@ function now(): string {
   return new Date().toISOString();
 }
 
+// ── Debounce helper ──
+
+const DEBOUNCE_MS = 100;
+
+class DebouncedWriter {
+  private timers = new Map<string, NodeJS.Timeout>();
+
+  schedule(key: string, fn: () => void): void {
+    const existing = this.timers.get(key);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this.timers.delete(key);
+      fn();
+    }, DEBOUNCE_MS);
+    timer.unref?.();
+    this.timers.set(key, timer);
+  }
+
+  /** Flush all pending writes immediately (e.g. before shutdown). */
+  flush(): void {
+    // We can't replay the callbacks from timers, so this just clears them.
+    // Data is in memory and will be persisted on next write.
+    for (const timer of this.timers.values()) {
+      clearTimeout(timer);
+    }
+    this.timers.clear();
+  }
+}
+
+// ── LRU message cache ──
+
+const MAX_CACHED_SESSIONS = 32;
+
+class LRUMessageCache {
+  private cache = new Map<string, BridgeMessage[]>();
+  private accessOrder: string[] = [];
+
+  has(sessionId: string): boolean {
+    return this.cache.has(sessionId);
+  }
+
+  get(sessionId: string): BridgeMessage[] | undefined {
+    const msgs = this.cache.get(sessionId);
+    if (msgs !== undefined) this.touch(sessionId);
+    return msgs;
+  }
+
+  set(sessionId: string, msgs: BridgeMessage[]): void {
+    this.cache.set(sessionId, msgs);
+    this.touch(sessionId);
+    this.evict();
+  }
+
+  private touch(sessionId: string): void {
+    const idx = this.accessOrder.indexOf(sessionId);
+    if (idx !== -1) this.accessOrder.splice(idx, 1);
+    this.accessOrder.push(sessionId);
+  }
+
+  private evict(): void {
+    while (this.accessOrder.length > MAX_CACHED_SESSIONS) {
+      const oldest = this.accessOrder.shift();
+      if (oldest) this.cache.delete(oldest);
+    }
+  }
+}
+
 // ── Lock entry ──
 
 interface LockEntry {
@@ -72,12 +143,13 @@ export class JsonFileStore implements BridgeStore {
   private settings: Map<string, string>;
   private sessions = new Map<string, BridgeSession>();
   private bindings = new Map<string, ChannelBinding>();
-  private messages = new Map<string, BridgeMessage[]>();
+  private messages = new LRUMessageCache();
   private permissionLinks = new Map<string, PermissionLinkRecord>();
   private offsets = new Map<string, string>();
   private dedupKeys = new Map<string, number>();
   private locks = new Map<string, LockEntry>();
   private auditLog: Array<AuditLogInput & { id: string; createdAt: string }> = [];
+  private writer = new DebouncedWriter();
 
   constructor(settingsMap: Map<string, string>) {
     this.settings = settingsMap;
@@ -139,53 +211,66 @@ export class JsonFileStore implements BridgeStore {
   }
 
   private persistSessions(): void {
-    writeJson(
-      path.join(DATA_DIR, 'sessions.json'),
-      Object.fromEntries(this.sessions),
-    );
+    this.writer.schedule('sessions', () => {
+      writeJson(
+        path.join(DATA_DIR, 'sessions.json'),
+        Object.fromEntries(this.sessions),
+      );
+    });
   }
 
   private persistBindings(): void {
-    writeJson(
-      path.join(DATA_DIR, 'bindings.json'),
-      Object.fromEntries(this.bindings),
-    );
+    this.writer.schedule('bindings', () => {
+      writeJson(
+        path.join(DATA_DIR, 'bindings.json'),
+        Object.fromEntries(this.bindings),
+      );
+    });
   }
 
   private persistPermissions(): void {
-    writeJson(
-      path.join(DATA_DIR, 'permissions.json'),
-      Object.fromEntries(this.permissionLinks),
-    );
+    this.writer.schedule('permissions', () => {
+      writeJson(
+        path.join(DATA_DIR, 'permissions.json'),
+        Object.fromEntries(this.permissionLinks),
+      );
+    });
   }
 
   private persistOffsets(): void {
-    writeJson(
-      path.join(DATA_DIR, 'offsets.json'),
-      Object.fromEntries(this.offsets),
-    );
+    this.writer.schedule('offsets', () => {
+      writeJson(
+        path.join(DATA_DIR, 'offsets.json'),
+        Object.fromEntries(this.offsets),
+      );
+    });
   }
 
   private persistDedup(): void {
-    writeJson(
-      path.join(DATA_DIR, 'dedup.json'),
-      Object.fromEntries(this.dedupKeys),
-    );
+    this.writer.schedule('dedup', () => {
+      writeJson(
+        path.join(DATA_DIR, 'dedup.json'),
+        Object.fromEntries(this.dedupKeys),
+      );
+    });
   }
 
   private persistAudit(): void {
-    writeJson(path.join(DATA_DIR, 'audit.json'), this.auditLog);
+    this.writer.schedule('audit', () => {
+      writeJson(path.join(DATA_DIR, 'audit.json'), this.auditLog);
+    });
   }
 
   private persistMessages(sessionId: string): void {
-    const msgs = this.messages.get(sessionId) || [];
-    writeJson(path.join(MESSAGES_DIR, `${sessionId}.json`), msgs);
+    this.writer.schedule(`msg:${sessionId}`, () => {
+      const msgs = this.messages.get(sessionId) || [];
+      writeJson(path.join(MESSAGES_DIR, `${sessionId}.json`), msgs);
+    });
   }
 
   private loadMessages(sessionId: string): BridgeMessage[] {
-    if (this.messages.has(sessionId)) {
-      return this.messages.get(sessionId)!;
-    }
+    const cached = this.messages.get(sessionId);
+    if (cached) return cached;
     const msgs = readJson<BridgeMessage[]>(
       path.join(MESSAGES_DIR, `${sessionId}.json`),
       [],

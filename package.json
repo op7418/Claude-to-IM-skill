@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.62",
-    "claude-to-im": "github:op7418/claude-to-im"
+    "claude-to-im": "github:op7418/claude-to-im#18c367379ef74587fe54f531538664a578a5f476"
   },
   "optionalDependencies": {
     "@openai/codex-sdk": "^0.110.0"

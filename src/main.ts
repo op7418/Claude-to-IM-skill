@@ -21,10 +21,12 @@ import { SDKLLMProvider, resolveClaudeCliPath, preflightCheck } from './llm-prov
 import { PendingPermissions } from './permission-gateway.js';
 import { RateLimiter } from './rate-limiter.js';
 import { setupLogger } from './logger.js';
+import { UsageTracker } from './usage-tracker.js';
 
 const RUNTIME_DIR = path.join(CTI_HOME, 'runtime');
 const STATUS_FILE = path.join(RUNTIME_DIR, 'status.json');
 const PID_FILE = path.join(RUNTIME_DIR, 'bridge.pid');
+const HEALTH_FILE = path.join(RUNTIME_DIR, 'health.ts');
 
 /**
  * Resolve the LLM provider based on the runtime setting.
@@ -32,7 +34,7 @@ const PID_FILE = path.join(RUNTIME_DIR, 'bridge.pid');
  * - 'codex': uses @openai/codex-sdk via CodexProvider
  * - 'auto': tries Claude first, falls back to Codex
  */
-async function resolveProvider(config: Config, pendingPerms: PendingPermissions, rateLimiter: RateLimiter): Promise<LLMProvider> {
+async function resolveProvider(config: Config, pendingPerms: PendingPermissions, rateLimiter: RateLimiter, usageTracker: UsageTracker): Promise<LLMProvider> {
   const runtime = config.runtime;
 
   if (runtime === 'codex') {
@@ -47,7 +49,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions,
       const check = preflightCheck(cliPath);
       if (check.ok) {
         console.log(`[claude-to-im] Auto: using Claude CLI at ${cliPath} (${check.version})`);
-        return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove, rateLimiter);
+        return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove, rateLimiter, (sid, u) => usageTracker.record(sid, u));
       }
       // Preflight failed — fall through to Codex instead of silently using a broken CLI
       console.warn(
@@ -92,7 +94,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions,
     process.exit(1);
   }
 
-  return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove, rateLimiter);
+  return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove, rateLimiter, (sid, u) => usageTracker.record(sid, u));
 }
 
 interface StatusInfo {
@@ -125,11 +127,19 @@ async function main(): Promise<void> {
   const settings = configToSettings(config);
   const store = new JsonFileStore(settings);
   const pendingPerms = new PendingPermissions();
+  pendingPerms.onNotify((toolUseID, event) => {
+    if (event === 'warning') {
+      console.warn(`[claude-to-im] Permission request ${toolUseID} expiring in 30s — respond in chat to approve/deny`);
+    } else {
+      console.warn(`[claude-to-im] Permission request ${toolUseID} timed out — auto-denied`);
+    }
+  });
   const rateLimiter = new RateLimiter(config.rateLimitRpm);
   if (config.rateLimitRpm > 0) {
     console.log(`[claude-to-im] Rate limit: ${config.rateLimitRpm} req/min per session`);
   }
-  const llm = await resolveProvider(config, pendingPerms, rateLimiter);
+  const usageTracker = new UsageTracker();
+  const llm = await resolveProvider(config, pendingPerms, rateLimiter, usageTracker);
   console.log(`[claude-to-im] Runtime: ${config.runtime}`);
 
   const gateway = {
@@ -173,6 +183,7 @@ async function main(): Promise<void> {
     console.log(`[claude-to-im] Shutting down (${reason})...`);
     pendingPerms.denyAll();
     rateLimiter.destroy();
+    usageTracker.flush();
     await bridgeManager.stop();
     writeStatus({ running: false, lastExitReason: reason });
     process.exit(0);
@@ -199,10 +210,16 @@ async function main(): Promise<void> {
     console.log(`[claude-to-im] exit (code: ${code})`);
   });
 
-  // ── Heartbeat to keep event loop alive ──
-  // setInterval is ref'd by default, preventing Node from exiting
-  // when the event loop would otherwise be empty.
-  setInterval(() => { /* keepalive */ }, 45_000);
+  // ── Heartbeat: keep event loop alive + write health timestamp ──
+  // The health file lets external monitors (daemon.sh, launchd) detect
+  // event-loop stalls even when the process PID is still alive.
+  const writeHealth = () => {
+    try {
+      fs.writeFileSync(HEALTH_FILE, String(Date.now()), 'utf-8');
+    } catch { /* ignore — runtime dir may not exist yet */ }
+  };
+  writeHealth();
+  setInterval(writeHealth, 45_000);
 }
 
 main().catch((err) => {

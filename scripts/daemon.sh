@@ -133,6 +133,13 @@ case "${1:-help}" in
       exit 1
     fi
 
+    # Clean up stale PID file from a previous crash (kill -9, OOM, etc.)
+    STALE_PID=$(read_pid)
+    if [ -n "$STALE_PID" ]; then
+      echo "Cleaning up stale PID file (process $STALE_PID no longer running)"
+      rm -f "$PID_FILE"
+    fi
+
     # Source config.env BEFORE clean_env so that CTI_ANTHROPIC_PASSTHROUGH
     # and other CTI_* flags are available when clean_env checks them.
     [ -f "$CTI_HOME/config.env" ] && set -a && source "$CTI_HOME/config.env" && set +a
@@ -219,7 +226,60 @@ case "${1:-help}" in
     tail -n "$N" "$LOG_FILE" 2>/dev/null | sed -E 's/(token|secret|password)(["\\x27]?\s*[:=]\s*["\\x27]?)[^ "]+/\1\2*****/gi'
     ;;
 
+  stats)
+    USAGE_FILE="$CTI_HOME/data/usage.json"
+    if [ ! -f "$USAGE_FILE" ]; then
+      echo "No usage data yet — start chatting with the bridge first."
+      exit 0
+    fi
+    echo "=== Claude-to-IM Usage Stats ==="
+    # Use node to format the JSON nicely
+    node -e "
+      const d = JSON.parse(require('fs').readFileSync('$USAGE_FILE','utf-8'));
+      const g = d.globalTotals;
+      const sc = Object.keys(d.sessions).length;
+      console.log('Total requests:  ' + g.requestCount);
+      console.log('Total sessions:  ' + sc);
+      console.log('Input tokens:    ' + g.totalInputTokens.toLocaleString());
+      console.log('Output tokens:   ' + g.totalOutputTokens.toLocaleString());
+      console.log('Total cost:      \$' + g.totalCostUsd.toFixed(4));
+      const sorted = Object.values(d.sessions)
+        .sort((a,b) => (b.totalInputTokens+b.totalOutputTokens)-(a.totalInputTokens+a.totalOutputTokens))
+        .slice(0, 5);
+      if (sorted.length) {
+        console.log('\nTop sessions:');
+        sorted.forEach(s => {
+          const t = s.totalInputTokens + s.totalOutputTokens;
+          console.log('  ' + s.sessionId.slice(0,8) + '... ' + s.requestCount + ' reqs, ' + t.toLocaleString() + ' tokens, \$' + s.totalCostUsd.toFixed(4));
+        });
+      }
+    "
+    ;;
+
+  health)
+    HEALTH_FILE="$CTI_HOME/runtime/health.ts"
+    if [ ! -f "$HEALTH_FILE" ]; then
+      echo "No health file found — bridge may not be running"
+      exit 1
+    fi
+    LAST_TS=$(cat "$HEALTH_FILE" 2>/dev/null)
+    NOW_TS=$(date +%s)000
+    # health.ts stores milliseconds; convert to seconds for comparison
+    LAST_SECS=$((LAST_TS / 1000))
+    NOW_SECS=$((NOW_TS / 1000))
+    AGE_SECS=$((NOW_SECS - LAST_SECS))
+    if [ "$AGE_SECS" -gt 120 ]; then
+      echo "UNHEALTHY: Last heartbeat ${AGE_SECS}s ago (threshold: 120s)"
+      echo "  The event loop may be stalled. Consider restarting:"
+      echo "  bash \"$SKILL_DIR/scripts/daemon.sh\" stop && bash \"$SKILL_DIR/scripts/daemon.sh\" start"
+      exit 1
+    else
+      echo "HEALTHY: Last heartbeat ${AGE_SECS}s ago"
+      exit 0
+    fi
+    ;;
+
   *)
-    echo "Usage: daemon.sh {start|stop|status|logs [N]}"
+    echo "Usage: daemon.sh {start|stop|status|logs [N]|stats|health}"
     ;;
 esac
