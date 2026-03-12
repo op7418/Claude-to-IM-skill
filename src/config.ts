@@ -30,6 +30,8 @@ export interface Config {
   qqMaxImageSize?: number;
   // Auto-approve all tool permission requests without user confirmation
   autoApprove?: boolean;
+  // Per-user rate limit in requests per minute (0 = unlimited)
+  rateLimitRpm: number;
 }
 
 export const CTI_HOME = process.env.CTI_HOME || path.join(os.homedir(), ".claude-to-im");
@@ -105,6 +107,9 @@ export function loadConfig(): Config {
       ? Number(env.get("CTI_QQ_MAX_IMAGE_SIZE"))
       : undefined,
     autoApprove: env.get("CTI_AUTO_APPROVE") === "true",
+    rateLimitRpm: env.has("CTI_RATE_LIMIT_RPM")
+      ? Math.max(0, parseInt(env.get("CTI_RATE_LIMIT_RPM")!, 10) || 0)
+      : 0,
   };
 }
 

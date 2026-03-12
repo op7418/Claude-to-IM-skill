@@ -19,6 +19,7 @@ import type { Config } from './config.js';
 import { JsonFileStore } from './store.js';
 import { SDKLLMProvider, resolveClaudeCliPath, preflightCheck } from './llm-provider.js';
 import { PendingPermissions } from './permission-gateway.js';
+import { RateLimiter } from './rate-limiter.js';
 import { setupLogger } from './logger.js';
 
 const RUNTIME_DIR = path.join(CTI_HOME, 'runtime');
@@ -31,7 +32,7 @@ const PID_FILE = path.join(RUNTIME_DIR, 'bridge.pid');
  * - 'codex': uses @openai/codex-sdk via CodexProvider
  * - 'auto': tries Claude first, falls back to Codex
  */
-async function resolveProvider(config: Config, pendingPerms: PendingPermissions): Promise<LLMProvider> {
+async function resolveProvider(config: Config, pendingPerms: PendingPermissions, rateLimiter: RateLimiter): Promise<LLMProvider> {
   const runtime = config.runtime;
 
   if (runtime === 'codex') {
@@ -46,7 +47,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
       const check = preflightCheck(cliPath);
       if (check.ok) {
         console.log(`[claude-to-im] Auto: using Claude CLI at ${cliPath} (${check.version})`);
-        return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove);
+        return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove, rateLimiter);
       }
       // Preflight failed — fall through to Codex instead of silently using a broken CLI
       console.warn(
@@ -91,7 +92,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
     process.exit(1);
   }
 
-  return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove);
+  return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove, rateLimiter);
 }
 
 interface StatusInfo {
@@ -124,7 +125,11 @@ async function main(): Promise<void> {
   const settings = configToSettings(config);
   const store = new JsonFileStore(settings);
   const pendingPerms = new PendingPermissions();
-  const llm = await resolveProvider(config, pendingPerms);
+  const rateLimiter = new RateLimiter(config.rateLimitRpm);
+  if (config.rateLimitRpm > 0) {
+    console.log(`[claude-to-im] Rate limit: ${config.rateLimitRpm} req/min per session`);
+  }
+  const llm = await resolveProvider(config, pendingPerms, rateLimiter);
   console.log(`[claude-to-im] Runtime: ${config.runtime}`);
 
   const gateway = {
@@ -167,6 +172,7 @@ async function main(): Promise<void> {
     const reason = signal ? `signal: ${signal}` : 'shutdown requested';
     console.log(`[claude-to-im] Shutting down (${reason})...`);
     pendingPerms.denyAll();
+    rateLimiter.destroy();
     await bridgeManager.stop();
     writeStatus({ running: false, lastExitReason: reason });
     process.exit(0);

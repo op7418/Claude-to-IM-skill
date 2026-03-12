@@ -13,6 +13,7 @@ import type { LLMProvider, StreamChatParams, FileAttachment } from 'claude-to-im
 import type { PendingPermissions } from './permission-gateway.js';
 
 import { sseEvent } from './sse-utils.js';
+import type { RateLimiter } from './rate-limiter.js';
 
 // ── Environment isolation ──
 
@@ -25,6 +26,10 @@ const ENV_WHITELIST = new Set([
   'NODE_PATH', 'NODE_EXTRA_CA_CERTS',
   'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME',
   'SSH_AUTH_SOCK',
+  // Proxy — required when the daemon runs behind a corporate proxy or GFW firewall.
+  // launchd / setsid create clean environments, so these must be whitelisted explicitly.
+  'HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy',
+  'NO_PROXY', 'no_proxy', 'ALL_PROXY', 'all_proxy',
 ]);
 
 /** Prefixes that are always stripped (even in inherit mode). */
@@ -422,20 +427,42 @@ export interface StreamState {
 export class SDKLLMProvider implements LLMProvider {
   private cliPath: string | undefined;
   private autoApprove: boolean;
+  private rateLimiter: RateLimiter | null;
 
-  constructor(private pendingPerms: PendingPermissions, cliPath?: string, autoApprove = false) {
+  constructor(
+    private pendingPerms: PendingPermissions,
+    cliPath?: string,
+    autoApprove = false,
+    rateLimiter: RateLimiter | null = null,
+  ) {
     this.cliPath = cliPath;
     this.autoApprove = autoApprove;
+    this.rateLimiter = rateLimiter;
   }
 
   streamChat(params: StreamChatParams): ReadableStream<string> {
     const pendingPerms = this.pendingPerms;
     const cliPath = this.cliPath;
     const autoApprove = this.autoApprove;
+    const rateLimiter = this.rateLimiter;
 
     return new ReadableStream({
       start(controller) {
         (async () => {
+          // ── Rate limiting ──
+          if (rateLimiter) {
+            const rl = rateLimiter.check(params.sessionId);
+            if (!rl.allowed) {
+              controller.enqueue(
+                sseEvent('error',
+                  `Rate limit exceeded. Please wait ${rl.retryAfterSecs}s before sending another message.`,
+                ),
+              );
+              controller.close();
+              return;
+            }
+          }
+
           // Ring-buffer for recent stderr output (max 4 KB)
           const MAX_STDERR = 4096;
           let stderrBuf = '';
