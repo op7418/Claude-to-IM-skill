@@ -131,6 +131,25 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 | `/claude-to-im reconfigure` | "reconfigure" / "修改配置" | 交互式修改配置 |
 | `/claude-to-im doctor` | "doctor" / "诊断" | 诊断问题 |
 
+### 多实例（Claude + Codex，互相隔离）
+
+如果你在一台机器上同时运行多个 bridge 实例，请为每个实例使用不同的
+`CTI_HOME` 与 `CTI_LAUNCHD_LABEL`：
+
+```bash
+# Claude 实例
+CTI_HOME=$HOME/.claude-to-im-claude \
+CTI_LAUNCHD_LABEL=com.claude-to-im.bridge.claude \
+bash scripts/daemon.sh status
+
+# Codex 实例
+CTI_HOME=$HOME/.claude-to-im-codex \
+CTI_LAUNCHD_LABEL=com.claude-to-im.bridge.codex \
+bash scripts/daemon.sh status
+```
+
+执行 `start`、`stop`、`doctor` 时也要使用同一组变量。
+
 ## 平台配置指南
 
 `setup` 向导会在每一步提供内联指引，以下是概要：

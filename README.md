@@ -131,6 +131,25 @@ All commands are run inside Claude Code or Codex:
 | `/claude-to-im reconfigure` | "reconfigure" / "修改配置" | Update config interactively |
 | `/claude-to-im doctor` | "doctor" / "诊断" | Diagnose issues |
 
+### Multi-instance (Claude + Codex, isolated)
+
+If you run multiple bridge daemons on one machine, use different `CTI_HOME` and
+`CTI_LAUNCHD_LABEL` values for each instance:
+
+```bash
+# Claude instance
+CTI_HOME=$HOME/.claude-to-im-claude \
+CTI_LAUNCHD_LABEL=com.claude-to-im.bridge.claude \
+bash scripts/daemon.sh status
+
+# Codex instance
+CTI_HOME=$HOME/.claude-to-im-codex \
+CTI_LAUNCHD_LABEL=com.claude-to-im.bridge.codex \
+bash scripts/daemon.sh status
+```
+
+Use the same pair when running `start`, `stop`, and `doctor`.
+
 ## Platform Setup Guides
 
 The `setup` wizard provides inline guidance for every step. Here's a summary:
