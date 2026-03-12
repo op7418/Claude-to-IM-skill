@@ -32,6 +32,10 @@ export interface Config {
   autoApprove?: boolean;
   // Per-user rate limit in requests per minute (0 = unlimited)
   rateLimitRpm: number;
+  // Global allowlist applied to ALL channels (userId or chatId).
+  // Takes priority over per-channel lists: if set, per-channel lists are merged in.
+  // When empty, per-channel lists (CTI_TG_ALLOWED_USERS etc.) apply as-is.
+  allowedUsers?: string[];
 }
 
 export const CTI_HOME = process.env.CTI_HOME || path.join(os.homedir(), ".claude-to-im");
@@ -110,6 +114,7 @@ export function loadConfig(): Config {
     rateLimitRpm: env.has("CTI_RATE_LIMIT_RPM")
       ? Math.max(0, parseInt(env.get("CTI_RATE_LIMIT_RPM")!, 10) || 0)
       : 0,
+    allowedUsers: splitCsv(env.get("CTI_ALLOWED_USERS")),
   };
 }
 
@@ -176,9 +181,27 @@ export function maskSecret(value: string): string {
   return "*".repeat(value.length - 4) + value.slice(-4);
 }
 
+/**
+ * Merge a global allowlist with a per-channel allowlist.
+ * Rules:
+ *   - If neither is set → undefined (no restriction, allow all)
+ *   - If only one is set → use it
+ *   - If both are set → union (global entries are always allowed; channel entries add on top)
+ */
+function mergeAllowedUsers(
+  global: string[] | undefined,
+  perChannel: string[] | undefined,
+): string[] | undefined {
+  if (!global?.length && !perChannel?.length) return undefined;
+  const merged = new Set<string>([...(global ?? []), ...(perChannel ?? [])]);
+  return merged.size > 0 ? [...merged] : undefined;
+}
+
 export function configToSettings(config: Config): Map<string, string> {
   const m = new Map<string, string>();
   m.set("remote_bridge_enabled", "true");
+
+  const globalUsers = config.allowedUsers?.length ? config.allowedUsers : undefined;
 
   // ── Telegram ──
   // Upstream keys: telegram_bot_token, bridge_telegram_enabled,
@@ -188,8 +211,9 @@ export function configToSettings(config: Config): Map<string, string> {
     config.enabledChannels.includes("telegram") ? "true" : "false"
   );
   if (config.tgBotToken) m.set("telegram_bot_token", config.tgBotToken);
-  if (config.tgAllowedUsers)
-    m.set("telegram_bridge_allowed_users", config.tgAllowedUsers.join(","));
+  const tgAllowed = mergeAllowedUsers(globalUsers, config.tgAllowedUsers);
+  if (tgAllowed)
+    m.set("telegram_bridge_allowed_users", tgAllowed.join(","));
   if (config.tgChatId) m.set("telegram_chat_id", config.tgChatId);
 
   // ── Discord ──
@@ -202,8 +226,9 @@ export function configToSettings(config: Config): Map<string, string> {
   );
   if (config.discordBotToken)
     m.set("bridge_discord_bot_token", config.discordBotToken);
-  if (config.discordAllowedUsers)
-    m.set("bridge_discord_allowed_users", config.discordAllowedUsers.join(","));
+  const discordAllowed = mergeAllowedUsers(globalUsers, config.discordAllowedUsers);
+  if (discordAllowed)
+    m.set("bridge_discord_allowed_users", discordAllowed.join(","));
   if (config.discordAllowedChannels)
     m.set(
       "bridge_discord_allowed_channels",
@@ -226,8 +251,9 @@ export function configToSettings(config: Config): Map<string, string> {
   if (config.feishuAppSecret)
     m.set("bridge_feishu_app_secret", config.feishuAppSecret);
   if (config.feishuDomain) m.set("bridge_feishu_domain", config.feishuDomain);
-  if (config.feishuAllowedUsers)
-    m.set("bridge_feishu_allowed_users", config.feishuAllowedUsers.join(","));
+  const feishuAllowed = mergeAllowedUsers(globalUsers, config.feishuAllowedUsers);
+  if (feishuAllowed)
+    m.set("bridge_feishu_allowed_users", feishuAllowed.join(","));
 
   // ── QQ ──
   // Upstream keys: bridge_qq_enabled, bridge_qq_app_id, bridge_qq_app_secret,
@@ -238,8 +264,9 @@ export function configToSettings(config: Config): Map<string, string> {
   );
   if (config.qqAppId) m.set("bridge_qq_app_id", config.qqAppId);
   if (config.qqAppSecret) m.set("bridge_qq_app_secret", config.qqAppSecret);
-  if (config.qqAllowedUsers)
-    m.set("bridge_qq_allowed_users", config.qqAllowedUsers.join(","));
+  const qqAllowed = mergeAllowedUsers(globalUsers, config.qqAllowedUsers);
+  if (qqAllowed)
+    m.set("bridge_qq_allowed_users", qqAllowed.join(","));
   if (config.qqImageEnabled !== undefined)
     m.set("bridge_qq_image_enabled", String(config.qqImageEnabled));
   if (config.qqMaxImageSize !== undefined)
