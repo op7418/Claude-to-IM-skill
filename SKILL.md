@@ -88,7 +88,17 @@ For each enabled channel, read `SKILL_DIR/references/setup-guides.md` and presen
 
 - **Telegram**: Bot Token → confirm (masked) → Chat ID (see guide for how to get it) → confirm → Allowed User IDs (optional). **Important:** At least one of Chat ID or Allowed User IDs must be set, otherwise the bot will reject all messages.
 - **Discord**: Bot Token → confirm (masked) → Allowed User IDs → Allowed Channel IDs (optional) → Allowed Guild IDs (optional). **Important:** At least one of Allowed User IDs or Allowed Channel IDs must be set, otherwise the bot will reject all messages (default-deny).
-- **Feishu**: App ID → confirm → App Secret → confirm (masked) → Domain (optional) → Allowed User IDs (optional). Guide through all 4 steps (A: batch permissions, B: enable bot, C: events & callbacks with long connection, D: publish version).
+- **Feishu**: This is the most complex platform — users are often complete beginners with Feishu's developer platform. Walk them through the 10-step guide in `setup-guides.md` ONE step at a time. Do NOT dump all steps at once; wait for the user to confirm each step before moving on.
+
+  The flow splits into two phases (credentials are collected at step 2, config is written at step 7):
+
+  **Phase 1: 权限 + 机器人能力 (steps 1-6)**
+  1. 创建应用 → 2. 复制 App ID/Secret → 3. 开启机器人 → 4. 批量添加权限 → 5. **第一次发布版本** → 6. 管理员审核
+
+  **Phase 2: 事件订阅 (steps 7-10)**
+  7. Collect remaining config (Domain, Allowed Users) + write config.env + **start bridge** → 8. 配置事件订阅（长连接） → 9. **第二次发布版本** → 10. 管理员审核
+
+  **Critical order dependency:** Event subscription (step 8) requires the bridge to be running (step 7), because Feishu validates the WebSocket connection when saving. And the bridge can only start after the first publish (step 5) makes permissions effective. This is why there are TWO publish cycles.
 - **QQ**: Collect two required fields, then optional ones:
   1. QQ App ID (required) → confirm
   2. QQ App Secret (required) → confirm (masked)
