@@ -35,6 +35,28 @@ export interface Config {
 export const CTI_HOME = process.env.CTI_HOME || path.join(os.homedir(), ".claude-to-im");
 export const CONFIG_PATH = path.join(CTI_HOME, "config.env");
 
+/**
+ * Expand common shell variables and tilde in a value string.
+ * parseEnvFile does NOT run through a shell, so $HOME / ~ would be stored
+ * as literal strings — which breaks spawn(cwd) downstream (ENOENT).
+ */
+function expandShellVars(value: string): string {
+  const home = os.homedir();
+  let result = value;
+  // $HOME and ${HOME}
+  result = result.replace(/\$HOME\b/g, home);
+  result = result.replace(/\$\{HOME\}/g, home);
+  // $USER and ${USER}
+  const user = os.userInfo().username;
+  result = result.replace(/\$USER\b/g, user);
+  result = result.replace(/\$\{USER\}/g, user);
+  // Leading ~ (only ~/... or ~ alone, not ~user)
+  if (result === '~' || result.startsWith('~/')) {
+    result = home + result.slice(1);
+  }
+  return result;
+}
+
 function parseEnvFile(content: string): Map<string, string> {
   const entries = new Map<string, string>();
   for (const line of content.split("\n")) {
@@ -51,6 +73,9 @@ function parseEnvFile(content: string): Map<string, string> {
     ) {
       value = value.slice(1, -1);
     }
+    // Expand shell variables to prevent literal $HOME leaking into
+    // persisted session/binding data (which causes spawn ENOENT).
+    value = expandShellVars(value);
     entries.set(key, value);
   }
   return entries;

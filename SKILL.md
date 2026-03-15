@@ -105,7 +105,7 @@ Ask for runtime, default working directory, model, and mode:
   - `claude` — uses Claude Code CLI + Claude Agent SDK (requires `claude` CLI installed)
   - `codex` — uses OpenAI Codex SDK (requires `codex` CLI; auth via `codex auth login` or `OPENAI_API_KEY`)
   - `auto` — tries Claude first, falls back to Codex if Claude CLI not found
-- **Working Directory**: default `$CWD`
+- **Working Directory**: default to the current working directory. **CRITICAL: Always write the fully-resolved absolute path** (e.g. `/Users/alice/projects`). NEVER write shell variables like `$HOME`, `$CWD`, `~`, or `$PWD` — the config parser does not expand them, and literal `$HOME` will leak into persisted session bindings, causing `spawn(cwd="$HOME")` → ENOENT that the SDK misreports as "native binary not found".
 - **Model** (optional): Leave blank to inherit the runtime's own default model. If the user wants to override, ask them to enter a model name. Do NOT hardcode or suggest specific model names — the available models change over time.
 - **Mode**: `code` (default), `plan`, `ask`
 
@@ -113,12 +113,13 @@ Ask for runtime, default working directory, model, and mode:
 
 1. Show a final summary table with all settings (secrets masked to last 4 chars)
 2. Ask user to confirm before writing
-3. Use Bash to create directory structure: `mkdir -p ~/.claude-to-im/{data,logs,runtime,data/messages}`
-4. Use Write to create `~/.claude-to-im/config.env` with all settings in KEY=VALUE format
-5. Use Bash to set permissions: `chmod 600 ~/.claude-to-im/config.env`
-6. Validate tokens — read `SKILL_DIR/references/token-validation.md` for the exact commands and expected responses for each platform. This catches typos and wrong credentials before the user tries to start the daemon.
-7. Report results with a summary table. If any validation fails, explain what might be wrong and how to fix it.
-8. On success, tell the user: "Setup complete! Run `/claude-to-im start` to start the bridge."
+3. **IMPORTANT: Before writing, verify that ALL path values (CTI_DEFAULT_WORKDIR, CTI_CLAUDE_CODE_EXECUTABLE) are fully-resolved absolute paths.** Replace any `$HOME`, `$CWD`, `~`, `$PWD` with the actual expanded path. The config parser does NOT expand shell variables — literal `$HOME` will be stored in session bindings and cause spawn ENOENT errors that are misreported as "native binary not found".
+4. Use Bash to create directory structure: `mkdir -p ~/.claude-to-im/{data,logs,runtime,data/messages}`
+5. Use Write to create `~/.claude-to-im/config.env` with all settings in KEY=VALUE format
+6. Use Bash to set permissions: `chmod 600 ~/.claude-to-im/config.env`
+7. Validate tokens — read `SKILL_DIR/references/token-validation.md` for the exact commands and expected responses for each platform. This catches typos and wrong credentials before the user tries to start the daemon.
+8. Report results with a summary table. If any validation fails, explain what might be wrong and how to fix it.
+9. On success, tell the user: "Setup complete! Run `/claude-to-im start` to start the bridge."
 
 ### `start`
 

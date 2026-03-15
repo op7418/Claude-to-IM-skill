@@ -55,6 +55,36 @@
 3. If the issue persists, check how many concurrent sessions are active -- each Claude Code session consumes memory
 4. Review logs for error loops that may cause memory leaks
 
+## "Claude Code native binary not found" but binary exists
+
+**Symptoms**: Sending a message to the bot returns "Claude Code native binary not found at /path/to/claude", but the binary exists and is executable. `doctor` preflight check passes. The error only happens when a user sends a message.
+
+**Root cause**: This is almost always a **bad `cwd`**, not a missing binary. The SDK catches `ENOENT` from `spawn()` and misreports it as "native binary not found". But `spawn()` throws `ENOENT` for both "command not found" AND "cwd directory does not exist".
+
+**Common trigger**: `config.env` contains shell variables like `$HOME`, `$CWD`, or `~` in `CTI_DEFAULT_WORKDIR`. The config parser does NOT expand shell variables — the literal string `$HOME` gets stored in session bindings. When the daemon processes a message, it passes `cwd="$HOME"` (literal) to `spawn()`, which fails with ENOENT.
+
+**Steps**:
+
+1. Check `config.env` for unexpanded shell variables:
+   ```bash
+   grep -E '\$HOME|\$CWD|\$PWD|~/' ~/.claude-to-im/config.env
+   ```
+2. **Critical**: Also check persisted session data — even if config.env is fixed, old bindings may still have the bad value:
+   ```bash
+   grep -r '\$HOME\|"\$CWD"' ~/.claude-to-im/data/
+   ```
+3. Fix any literal `$HOME` / `$CWD` / `~` to absolute paths in:
+   - `~/.claude-to-im/config.env`
+   - `~/.claude-to-im/data/bindings.json`
+   - `~/.claude-to-im/data/sessions.json`
+4. Restart the daemon:
+   ```bash
+   /claude-to-im stop
+   /claude-to-im start
+   ```
+
+**Why fixing config.env alone is not enough**: The bridge creates session bindings on first message. The binding stores `workingDirectory` from the config at creation time. Subsequent messages use the binding's stored value, not the current config default. So you must fix both the config AND the persisted binding data.
+
 ## Stale PID file
 
 **Symptoms**: Status shows "running" but the process doesn't exist, or start refuses because it thinks a daemon is already running.
