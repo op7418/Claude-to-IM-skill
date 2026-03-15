@@ -1,11 +1,15 @@
 export interface PermissionResult {
   behavior: 'allow' | 'deny';
   message?: string;
+  /** For AskUserQuestion: the collected answers to pass back via updatedInput */
+  updatedInput?: Record<string, unknown>;
 }
 
 export interface PermissionResolution {
   behavior: 'allow' | 'deny';
   message?: string;
+  /** For AskUserQuestion: answers to inject as updatedInput in canUseTool result */
+  updatedInput?: Record<string, unknown>;
 }
 
 export class PendingPermissions {
@@ -30,7 +34,7 @@ export class PendingPermissions {
     if (!entry) return false;
     clearTimeout(entry.timer);
     if (resolution.behavior === 'allow') {
-      entry.resolve({ behavior: 'allow' });
+      entry.resolve({ behavior: 'allow', updatedInput: resolution.updatedInput });
     } else {
       entry.resolve({ behavior: 'deny', message: resolution.message || 'Denied by user' });
     }

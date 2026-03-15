@@ -500,7 +500,7 @@ export class SDKLLMProvider implements LLMProvider {
                   const result = await pendingPerms.waitFor(opts.toolUseID);
 
                   if (result.behavior === 'allow') {
-                    return { behavior: 'allow' as const, updatedInput: input };
+                    return { behavior: 'allow' as const, updatedInput: result.updatedInput || input };
                   }
                   return {
                     behavior: 'deny' as const,
