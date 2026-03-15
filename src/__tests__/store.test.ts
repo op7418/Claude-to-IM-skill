@@ -246,6 +246,54 @@ describe('JsonFileStore', () => {
     assert.equal(store.listPendingPermissionLinksByChat('chat-unknown').length, 0);
   });
 
+  it('resolveAllPendingPermissions marks all unresolved as resolved', () => {
+    const store = new JsonFileStore(makeSettings());
+    store.insertPermissionLink({
+      permissionRequestId: 'stale-1',
+      channelType: 'feishu',
+      chatId: 'chat-1',
+      messageId: 'msg-1',
+      toolName: 'Read',
+      suggestions: '',
+    });
+    store.insertPermissionLink({
+      permissionRequestId: 'stale-2',
+      channelType: 'feishu',
+      chatId: 'chat-1',
+      messageId: 'msg-2',
+      toolName: 'Bash',
+      suggestions: '[]',
+    });
+    store.insertPermissionLink({
+      permissionRequestId: 'already-done',
+      channelType: 'feishu',
+      chatId: 'chat-1',
+      messageId: 'msg-3',
+      toolName: 'Glob',
+      suggestions: '',
+    });
+    // Resolve one manually first
+    store.markPermissionLinkResolved('already-done');
+
+    // 2 unresolved remain
+    assert.equal(store.listPendingPermissionLinksByChat('chat-1').length, 2);
+
+    const count = store.resolveAllPendingPermissions();
+    assert.equal(count, 2);
+
+    // All resolved now
+    assert.equal(store.listPendingPermissionLinksByChat('chat-1').length, 0);
+
+    // Persisted: reload from disk and verify
+    const store2 = new JsonFileStore(makeSettings());
+    assert.equal(store2.listPendingPermissionLinksByChat('chat-1').length, 0);
+    assert.equal(store2.getPermissionLink('stale-1')?.resolved, true);
+    assert.equal(store2.getPermissionLink('stale-2')?.resolved, true);
+
+    // Calling again returns 0 (nothing left to resolve)
+    assert.equal(store2.resolveAllPendingPermissions(), 0);
+  });
+
   // ── Dedup ──
 
   it('dedup insert and check within window', () => {

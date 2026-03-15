@@ -460,6 +460,26 @@ export class JsonFileStore implements BridgeStore {
     return result;
   }
 
+  /**
+   * Mark all unresolved permission links as resolved.
+   *
+   * Called at startup: pending permissions from a previous bridge process
+   * can never be fulfilled (the in-memory PendingPermissions Promises are
+   * gone), so leaving them unresolved causes "Multiple pending permissions"
+   * errors when the user sends numeric shortcuts in new sessions.
+   */
+  resolveAllPendingPermissions(): number {
+    let count = 0;
+    for (const link of this.permissionLinks.values()) {
+      if (!link.resolved) {
+        link.resolved = true;
+        count++;
+      }
+    }
+    if (count > 0) this.persistPermissions();
+    return count;
+  }
+
   // ── Channel Offsets ──
 
   getChannelOffset(key: string): string {
