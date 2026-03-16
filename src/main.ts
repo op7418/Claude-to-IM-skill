@@ -13,6 +13,7 @@ import * as bridgeManager from 'claude-to-im/src/lib/bridge/bridge-manager.js';
 // Side-effect import to trigger adapter self-registration
 import 'claude-to-im/src/lib/bridge/adapters/index.js';
 
+import type { PermissionUpdate } from '@anthropic-ai/claude-agent-sdk';
 import type { LLMProvider } from 'claude-to-im/src/lib/bridge/host.js';
 import { loadConfig, configToSettings, CTI_HOME } from './config.js';
 import type { Config } from './config.js';
@@ -128,7 +129,10 @@ async function main(): Promise<void> {
   console.log(`[claude-to-im] Runtime: ${config.runtime}`);
 
   const gateway = {
-    resolvePendingPermission: (id: string, resolution: { behavior: 'allow' | 'deny'; message?: string }) =>
+    resolvePendingPermission: (
+      id: string,
+      resolution: { behavior: 'allow' | 'deny'; message?: string; updatedPermissions?: PermissionUpdate[] },
+    ) =>
       pendingPerms.resolve(id, resolution),
   };
 

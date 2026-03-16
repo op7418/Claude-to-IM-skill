@@ -249,3 +249,53 @@ When enabled, images sent by users in QQ private chat will be forwarded to the A
 ### Max Image Size MB (optional)
 
 Default: `20`. Maximum image file size in MB that will be forwarded to the AI agent. Images larger than this limit are ignored.
+
+## DingTalk (钉钉)
+
+### Client ID (AppKey) and Client Secret (AppSecret)
+
+**How to create a DingTalk app and get credentials:**
+1. Go to DingTalk Open Platform: https://open-dev.dingtalk.com/
+2. Click **"Application Development"** → **"Enterprise Internal Development"** → **"Create Application"**
+3. Fill in the app name and description → click **"Create"**
+4. On the app's **"Credentials & Basic Info"** page, find:
+   - **AppKey** (also called Client ID, like `dingxxxxxxxxxx`)
+   - **AppSecret** (also called Client Secret, click to reveal)
+
+### Step A — Enable the bot capability
+
+1. In the app page, go to **"Add Capability"** → enable **"Robot"** (机器人)
+2. Set the robot name, avatar and description
+3. Under robot settings, configure the **message receiving mode** to **"Stream Mode"** (Stream 模式)
+
+### Step B — Configure Stream Mode
+
+1. In the robot settings, make sure **"Stream Mode"** is selected (not HTTP mode)
+2. Stream mode uses WebSocket long connection — no public server URL needed
+3. The robot will automatically connect when the bridge starts
+
+### Step C — Publish the app
+
+1. Go to **"Version Management & Release"** → click **"Create Version"**
+2. Fill in version number and update description → click **"Save"**
+3. Click **"Publish"**
+4. For enterprise internal apps, the admin can approve it in the **DingTalk Admin Console** → **App Management**
+5. **Important:** The bot will NOT respond to messages until the app is published and approved
+
+### Robot Code (optional)
+
+The Robot Code is used for sending proactive messages via OpenAPI. It defaults to the same value as Client ID (AppKey).
+You can find it on the robot configuration page in the DingTalk Open Platform.
+Leave empty to use Client ID as robot code.
+
+### Allowed User IDs (optional)
+
+DingTalk user IDs are **staffId** format (e.g. `manager1234`).
+You can find them in the DingTalk Admin Console under employee profiles, or via the DingTalk contact API.
+Enter comma-separated IDs to restrict access. Leave empty to allow all users.
+
+### Allowed Group IDs (optional)
+
+DingTalk group IDs are **conversationId** format (e.g. `cidXXXXXXXXXX`).
+You can find the conversationId in the webhook callback data when the bot receives a group message.
+Enter comma-separated IDs to restrict the bot to specific groups. Leave empty to allow all groups.

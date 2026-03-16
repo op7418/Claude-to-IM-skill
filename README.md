@@ -1,6 +1,6 @@
 # Claude-to-IM Skill
 
-Bridge Claude Code / Codex to IM platforms — chat with AI coding agents from Telegram, Discord, Feishu/Lark, or QQ.
+Bridge Claude Code / Codex to IM platforms — chat with AI coding agents from Telegram, Discord, Feishu/Lark, QQ, or DingTalk..
 
 [中文文档](README_CN.md)
 
@@ -13,7 +13,7 @@ Bridge Claude Code / Codex to IM platforms — chat with AI coding agents from T
 This skill runs a background daemon that connects your IM bots to Claude Code or Codex sessions. Messages from IM are forwarded to the AI coding agent, and responses (including tool use, permission requests, streaming previews) are sent back to your chat.
 
 ```
-You (Telegram/Discord/Feishu/QQ)
+You (Telegram/Discord/Feishu/QQ/DingTalk)
   ↕ Bot API
 Background Daemon (Node.js)
   ↕ Claude Agent SDK or Codex SDK (configurable via CTI_RUNTIME)
@@ -22,7 +22,7 @@ Claude Code / Codex → reads/writes your codebase
 
 ## Features
 
-- **Four IM platforms** — Telegram, Discord, Feishu/Lark, QQ — enable any combination
+- **Five IM platforms** — Telegram, Discord, Feishu/Lark, QQ, DingTalk — enable any combination
 - **Interactive setup** — guided wizard collects tokens with step-by-step instructions
 - **Permission control** — tool calls require explicit approval via inline buttons (Telegram/Discord) or text `/perm` commands (Feishu/QQ)
 - **Streaming preview** — see Claude's response as it types (Telegram & Discord)
@@ -97,7 +97,7 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 
 The wizard will guide you through:
 
-1. **Choose channels** — pick Telegram, Discord, Feishu, QQ, or any combination
+1. **Choose channels** — pick Telegram, Discord, Feishu, QQ, DingTalk, or any combination
 2. **Enter credentials** — the wizard explains exactly where to get each token, which settings to enable, and what permissions to grant
 3. **Set defaults** — working directory, model, and mode
 4. **Validate** — tokens are verified against platform APIs immediately
@@ -168,6 +168,14 @@ The `setup` wizard provides inline guidance for every step. Here's a summary:
 3. Configure sandbox access and scan QR code with QQ to add the bot
 4. `CTI_QQ_ALLOWED_USERS` takes `user_openid` values (not QQ numbers) — can be left empty initially
 5. Set `CTI_QQ_IMAGE_ENABLED=false` if the underlying provider doesn't support image input
+
+### DingTalk (钉钉)
+
+1. Go to [DingTalk Open Platform](https://open-dev.dingtalk.com/) → Application Development → Enterprise Internal Development → Create Application
+2. Get **AppKey** (Client ID) and **AppSecret** (Client Secret) from Credentials & Basic Info
+3. Enable **Robot** capability under "Add Capability"
+4. Set message receiving mode to **Stream Mode** (WebSocket long connection — no public server needed)
+5. **Publish**: go to "Version Management & Release" → create version → publish → approve in Admin Console
 
 ## Architecture
 

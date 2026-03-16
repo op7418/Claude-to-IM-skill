@@ -1,7 +1,7 @@
 ---
 name: claude-to-im
 description: |
-  Bridge THIS Claude Code session to Telegram, Discord, Feishu/Lark, or QQ so the
+  Bridge THIS Claude Code session to Telegram, Discord, Feishu/Lark, QQ, or DingTalk so the
   user can chat with Claude from their phone. Use for: setting up, starting, stopping,
   or diagnosing the claude-to-im bridge daemon; forwarding Claude replies to a messaging
   app; any phrase like "claude-to-im", "bridge", "消息推送", "消息转发", "桥接",
@@ -76,11 +76,12 @@ When AskUserQuestion IS available, collect input **one field at a time**. After 
 
 **Step 1 — Choose channels**
 
-Ask which channels to enable (telegram, discord, feishu, qq). Accept comma-separated input. Briefly describe each:
+Ask which channels to enable (telegram, discord, feishu, qq, dingtalk). Accept comma-separated input. Briefly describe each:
 - **telegram** — Best for personal use. Streaming preview, inline permission buttons.
 - **discord** — Good for team use. Server/channel/user-level access control.
 - **feishu** (Lark) — For Feishu/Lark teams. Streaming cards, tool progress, inline permission buttons.
 - **qq** — QQ C2C private chat only. No inline permission buttons, no streaming preview. Permissions use text `/perm ...` commands.
+- **dingtalk** — For DingTalk teams. Stream mode with WebSocket long connection.
 
 **Step 2 — Collect tokens per channel**
 
@@ -101,6 +102,8 @@ For each enabled channel, collect one credential at a time. Tell the user where 
   4. Image Enabled (optional, default true, press Enter to skip) — if the underlying provider doesn't support image input, set to false
   5. Max Image Size MB (optional, default 20, press Enter to skip)
   - Remind user: QQ first version only supports C2C private chat sandbox access. No group/channel support, no inline buttons, no streaming preview.
+
+- **DingTalk**: Client ID (AppKey) → confirm → Client Secret (AppSecret) → confirm (masked) → Robot Code (optional, defaults to Client ID) → Allowed User IDs (optional) → Allowed Group IDs (optional). Guide through all 3 steps (A: create app & enable bot, B: configure Stream mode, C: publish).
 
 **Step 3 — General settings**
 

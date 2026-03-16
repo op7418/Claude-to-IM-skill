@@ -1,6 +1,6 @@
 # Claude-to-IM Skill
 
-将 Claude Code / Codex 桥接到 IM 平台 —— 在 Telegram、Discord、飞书或 QQ 中与 AI 编程代理对话。
+将 Claude Code / Codex 桥接到 IM 平台 —— 在 Telegram、Discord、QQ、钉钉中与 AI 编程代理对话。
 
 [English](README.md)
 
@@ -13,7 +13,7 @@
 本 Skill 运行一个后台守护进程，将你的 IM 机器人连接到 Claude Code 或 Codex 会话。来自 IM 的消息被转发给 AI 编程代理，响应（包括工具调用、权限请求、流式预览）会发回到聊天中。
 
 ```
-你 (Telegram/Discord/飞书/QQ)
+你 (Telegram/Discord/飞书/QQ/钉钉)
   ↕ Bot API
 后台守护进程 (Node.js)
   ↕ Claude Agent SDK 或 Codex SDK（通过 CTI_RUNTIME 配置）
@@ -22,7 +22,7 @@ Claude Code / Codex → 读写你的代码库
 
 ## 功能特点
 
-- **四大 IM 平台** — Telegram、Discord、飞书、QQ，可任意组合启用
+- **五大 IM 平台** — Telegram、Discord、飞书、QQ、钉钉，可任意组合启用
 - **交互式配置** — 引导式向导逐步收集 token，附带详细获取说明
 - **权限控制** — 工具调用需要在聊天中通过内联按钮（Telegram/Discord）或文本 `/perm` 命令（飞书/QQ）明确批准
 - **流式预览** — 实时查看 Claude 的输出（Telegram 和 Discord 支持）
@@ -97,7 +97,7 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 
 向导会引导你完成以下步骤：
 
-1. **选择渠道** — 选择 Telegram、Discord、飞书、QQ，或任意组合
+1. **选择渠道** — 选择 Telegram、Discord、飞书、QQ、钉钉，或任意组合
 2. **输入凭据** — 向导会详细说明如何获取每个 token、需要开启哪些设置、授予哪些权限
 3. **设置默认值** — 工作目录、模型、模式
 4. **验证** — 立即通过平台 API 验证 token 有效性
@@ -168,6 +168,14 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 3. 配置沙箱接入，用 QQ 扫码添加机器人
 4. `CTI_QQ_ALLOWED_USERS` 填写 `user_openid`（不是 QQ 号）— 可先留空
 5. 如果底层 provider 不支持图片输入，设置 `CTI_QQ_IMAGE_ENABLED=false`
+
+### 钉钉
+
+1. 前往[钉钉开放平台](https://open-dev.dingtalk.com/) → 应用开发 → 企业内部开发 → 创建应用
+2. 获取 **AppKey**（Client ID）和 **AppSecret**（Client Secret）
+3. 在"添加应用能力"中启用**机器人**
+4. 消息接收模式选择 **Stream 模式**（WebSocket 长连接，无需公网服务器）
+5. **发布**：进入"版本管理与发布" → 创建版本 → 发布 → 在管理后台审核通过
 
 ## 架构
 

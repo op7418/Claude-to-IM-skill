@@ -28,6 +28,12 @@ export interface Config {
   qqAllowedUsers?: string[];
   qqImageEnabled?: boolean;
   qqMaxImageSize?: number;
+  // DingTalk
+  dingtalkClientId?: string;
+  dingtalkClientSecret?: string;
+  dingtalkRobotCode?: string;
+  dingtalkAllowedUsers?: string[];
+  dingtalkAllowedGroups?: string[];
   // Auto-approve all tool permission requests without user confirmation
   autoApprove?: boolean;
 }
@@ -104,6 +110,11 @@ export function loadConfig(): Config {
     qqMaxImageSize: env.get("CTI_QQ_MAX_IMAGE_SIZE")
       ? Number(env.get("CTI_QQ_MAX_IMAGE_SIZE"))
       : undefined,
+    dingtalkClientId: env.get("CTI_DINGTALK_CLIENT_ID") || undefined,
+    dingtalkClientSecret: env.get("CTI_DINGTALK_CLIENT_SECRET") || undefined,
+    dingtalkRobotCode: env.get("CTI_DINGTALK_ROBOT_CODE") || undefined,
+    dingtalkAllowedUsers: splitCsv(env.get("CTI_DINGTALK_ALLOWED_USERS")),
+    dingtalkAllowedGroups: splitCsv(env.get("CTI_DINGTALK_ALLOWED_GROUPS")),
     autoApprove: env.get("CTI_AUTO_APPROVE") === "true",
   };
 }
@@ -159,6 +170,18 @@ export function saveConfig(config: Config): void {
     out += formatEnvLine("CTI_QQ_IMAGE_ENABLED", String(config.qqImageEnabled));
   if (config.qqMaxImageSize !== undefined)
     out += formatEnvLine("CTI_QQ_MAX_IMAGE_SIZE", String(config.qqMaxImageSize));
+  
+  out += formatEnvLine("CTI_DINGTALK_CLIENT_ID", config.dingtalkClientId);
+  out += formatEnvLine("CTI_DINGTALK_CLIENT_SECRET", config.dingtalkClientSecret);
+  out += formatEnvLine("CTI_DINGTALK_ROBOT_CODE", config.dingtalkRobotCode);
+  out += formatEnvLine(
+    "CTI_DINGTALK_ALLOWED_USERS",
+    config.dingtalkAllowedUsers?.join(",")
+  );
+  out += formatEnvLine(
+    "CTI_DINGTALK_ALLOWED_GROUPS",
+    config.dingtalkAllowedGroups?.join(",")
+  );
 
   fs.mkdirSync(CTI_HOME, { recursive: true });
   const tmpPath = CONFIG_PATH + ".tmp";
@@ -239,6 +262,33 @@ export function configToSettings(config: Config): Map<string, string> {
     m.set("bridge_qq_image_enabled", String(config.qqImageEnabled));
   if (config.qqMaxImageSize !== undefined)
     m.set("bridge_qq_max_image_size", String(config.qqMaxImageSize));
+
+  // ── DingTalk ──
+  // Upstream keys: bridge_dingtalk_client_id, bridge_dingtalk_client_secret,
+  //   bridge_dingtalk_robot_code, bridge_dingtalk_enabled,
+  //   bridge_dingtalk_allowed_users, bridge_dingtalk_group_policy,
+  //   bridge_dingtalk_group_allow_from, bridge_dingtalk_require_mention
+  m.set(
+    "bridge_dingtalk_enabled",
+    config.enabledChannels.includes("dingtalk") ? "true" : "false"
+  );
+  if (config.dingtalkClientId)
+    m.set("bridge_dingtalk_client_id", config.dingtalkClientId);
+  if (config.dingtalkClientSecret)
+    m.set("bridge_dingtalk_client_secret", config.dingtalkClientSecret);
+  if (config.dingtalkRobotCode)
+    m.set("bridge_dingtalk_robot_code", config.dingtalkRobotCode);
+  else if (config.dingtalkClientId)
+    m.set("bridge_dingtalk_robot_code", config.dingtalkClientId);
+  m.set("bridge_dingtalk_require_mention", "true");
+  if (config.dingtalkAllowedUsers)
+    m.set("bridge_dingtalk_allowed_users", config.dingtalkAllowedUsers.join(","));
+  m.set(
+    "bridge_dingtalk_group_policy",
+    config.dingtalkAllowedGroups && config.dingtalkAllowedGroups.length > 0 ? "allowlist" : "open"
+  );
+  if (config.dingtalkAllowedGroups)
+    m.set("bridge_dingtalk_group_allow_from", config.dingtalkAllowedGroups.join(","));
 
   // ── Defaults ──
   // Upstream keys: bridge_default_work_dir, bridge_default_model, default_model
