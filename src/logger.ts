@@ -27,8 +27,16 @@ const MAX_ROTATED = 3;
 
 let logStream: fs.WriteStream | null = null;
 
+// Keep references to original console methods for stderr fallback
+const origStderrWrite = process.stderr.write.bind(process.stderr);
+
 function openLogStream(): fs.WriteStream {
-  return fs.createWriteStream(LOG_PATH, { flags: 'a' });
+  const stream = fs.createWriteStream(LOG_PATH, { flags: 'a' });
+  stream.on('error', () => {
+    // Stream broken (disk full, permission error, etc.) — will fallback to stderr
+    logStream = null;
+  });
+  return stream;
 }
 
 function rotateIfNeeded(): void {
@@ -70,7 +78,17 @@ export function setupLogger(): void {
     const masked = maskSecrets(formatted);
 
     rotateIfNeeded();
-    logStream?.write(masked + '\n');
+
+    if (logStream) {
+      const ok = logStream.write(masked + '\n');
+      if (!ok) {
+        // Backpressure or write failed — fallback to stderr
+        origStderrWrite(masked + '\n');
+      }
+    } else {
+      // logStream unavailable (disk full, broken pipe, etc.) — fallback to stderr
+      origStderrWrite(masked + '\n');
+    }
   };
 
   console.log = (...args: unknown[]) => write('INFO', args);

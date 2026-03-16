@@ -13,6 +13,7 @@ import type { LLMProvider, StreamChatParams, FileAttachment } from 'claude-to-im
 import type { PendingPermissions } from './permission-gateway.js';
 
 import { sseEvent } from './sse-utils.js';
+import type { RateLimiter } from './rate-limiter.js';
 
 // ── Environment isolation ──
 
@@ -25,6 +26,10 @@ const ENV_WHITELIST = new Set([
   'NODE_PATH', 'NODE_EXTRA_CA_CERTS',
   'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME',
   'SSH_AUTH_SOCK',
+  // Proxy — required when the daemon runs behind a corporate proxy or GFW firewall.
+  // launchd / setsid create clean environments, so these must be whitelisted explicitly.
+  'HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy',
+  'NO_PROXY', 'no_proxy', 'ALL_PROXY', 'all_proxy',
 ]);
 
 /** Prefixes that are always stripped (even in inherit mode). */
@@ -419,23 +424,58 @@ export interface StreamState {
   lastAssistantText: string;
 }
 
+/** Callback for tracking token usage after each request. */
+export type UsageCallback = (sessionId: string, usage: {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cost_usd?: number;
+}) => void;
+
 export class SDKLLMProvider implements LLMProvider {
   private cliPath: string | undefined;
   private autoApprove: boolean;
+  private rateLimiter: RateLimiter | null;
+  private onUsage: UsageCallback | null;
 
-  constructor(private pendingPerms: PendingPermissions, cliPath?: string, autoApprove = false) {
+  constructor(
+    private pendingPerms: PendingPermissions,
+    cliPath?: string,
+    autoApprove = false,
+    rateLimiter: RateLimiter | null = null,
+    onUsage: UsageCallback | null = null,
+  ) {
     this.cliPath = cliPath;
     this.autoApprove = autoApprove;
+    this.rateLimiter = rateLimiter;
+    this.onUsage = onUsage;
   }
 
   streamChat(params: StreamChatParams): ReadableStream<string> {
     const pendingPerms = this.pendingPerms;
     const cliPath = this.cliPath;
     const autoApprove = this.autoApprove;
+    const rateLimiter = this.rateLimiter;
+    const onUsage = this.onUsage;
 
     return new ReadableStream({
       start(controller) {
         (async () => {
+          // ── Rate limiting ──
+          if (rateLimiter) {
+            const rl = rateLimiter.check(params.sessionId);
+            if (!rl.allowed) {
+              controller.enqueue(
+                sseEvent('error',
+                  `Rate limit exceeded. Please wait ${rl.retryAfterSecs}s before sending another message.`,
+                ),
+              );
+              controller.close();
+              return;
+            }
+          }
+
           // Ring-buffer for recent stderr output (max 4 KB)
           const MAX_STDERR = 4096;
           let stderrBuf = '';
@@ -519,7 +559,10 @@ export class SDKLLMProvider implements LLMProvider {
             });
 
             for await (const msg of q) {
-              handleMessage(msg, controller, state);
+              const usage = handleMessage(msg, controller, state);
+              if (usage && onUsage) {
+                onUsage(params.sessionId, usage);
+              }
             }
 
             controller.close();
@@ -596,12 +639,21 @@ export class SDKLLMProvider implements LLMProvider {
   }
 }
 
-/** @internal Exported for testing. */
+/** Usage data returned from a result message. */
+export interface ResultUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cost_usd?: number;
+}
+
+/** @internal Exported for testing. Returns usage data when a successful result is received. */
 export function handleMessage(
   msg: SDKMessage,
   controller: ReadableStreamDefaultController<string>,
   state: StreamState,
-): void {
+): ResultUsage | undefined {
   switch (msg.type) {
     case 'stream_event': {
       const event = msg.event;
@@ -680,19 +732,21 @@ export function handleMessage(
     case 'result': {
       state.hasReceivedResult = true;
       if (msg.subtype === 'success') {
+        const usage: ResultUsage = {
+          input_tokens: msg.usage.input_tokens,
+          output_tokens: msg.usage.output_tokens,
+          cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
+          cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
+          cost_usd: msg.total_cost_usd,
+        };
         controller.enqueue(
           sseEvent('result', {
             session_id: msg.session_id,
             is_error: msg.is_error,
-            usage: {
-              input_tokens: msg.usage.input_tokens,
-              output_tokens: msg.usage.output_tokens,
-              cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
-              cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
-              cost_usd: msg.total_cost_usd,
-            },
+            usage,
           }),
         );
+        return usage;
       } else {
         // Error result from SDK (distinct from transport errors in catch)
         const errors =
@@ -720,4 +774,5 @@ export function handleMessage(
       // Ignore other message types (auth_status, task_notification, etc.)
       break;
   }
+  return undefined;
 }
