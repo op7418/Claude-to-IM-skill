@@ -59,13 +59,21 @@ function rotateIfNeeded(): void {
   logStream = openLogStream();
 }
 
+function safeStringify(a: unknown): string {
+  try {
+    return JSON.stringify(a);
+  } catch {
+    return String(a);
+  }
+}
+
 export function setupLogger(): void {
   fs.mkdirSync(LOG_DIR, { recursive: true });
   logStream = openLogStream();
 
   const write = (level: string, args: unknown[]) => {
     const timestamp = new Date().toISOString();
-    const message = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+    const message = args.map((a) => (typeof a === 'string' ? a : safeStringify(a))).join(' ');
     const formatted = `[${timestamp}] [${level}] ${message}`;
     const masked = maskSecrets(formatted);
 
