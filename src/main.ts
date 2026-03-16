@@ -14,7 +14,7 @@ import * as bridgeManager from 'claude-to-im/src/lib/bridge/bridge-manager.js';
 import 'claude-to-im/src/lib/bridge/adapters/index.js';
 
 import type { LLMProvider } from 'claude-to-im/src/lib/bridge/host.js';
-import { loadConfig, configToSettings, CTI_HOME } from './config.js';
+import { loadConfig, validateConfig, configToSettings, CTI_HOME } from './config.js';
 import type { Config } from './config.js';
 import { JsonFileStore } from './store.js';
 import { SDKLLMProvider, resolveClaudeCliPath, preflightCheck } from './llm-provider.js';
@@ -118,6 +118,17 @@ async function main(): Promise<void> {
   const config = loadConfig();
   setupLogger();
 
+  // Validate config before doing anything else
+  const configErrors = validateConfig(config);
+  if (configErrors.length > 0) {
+    console.error('[claude-to-im] Configuration errors found:');
+    for (const err of configErrors) {
+      console.error(`  ✗ ${err.field}: ${err.message}`);
+    }
+    console.error('  Fix: edit ~/.claude-to-im/config.env and restart');
+    process.exit(1);
+  }
+
   const runId = crypto.randomUUID();
   console.log(`[claude-to-im] Starting bridge (run_id: ${runId})`);
 
@@ -197,6 +208,10 @@ async function main(): Promise<void> {
   // setInterval is ref'd by default, preventing Node from exiting
   // when the event loop would otherwise be empty.
   setInterval(() => { /* keepalive */ }, 45_000);
+
+  // ── Periodic maintenance ──
+  // Clean up expired dedup keys every 10 minutes to prevent unbounded growth.
+  setInterval(() => { store.cleanupExpiredDedup(); }, 10 * 60 * 1000).unref();
 }
 
 main().catch((err) => {
