@@ -12,6 +12,7 @@ await esbuild.build({
     // dist/cli.js relative to its own package location. Bundling it
     // breaks that path resolution.
     '@anthropic-ai/claude-agent-sdk',
+    '@tencent-ai/agent-sdk',
     '@openai/codex-sdk',
     // discord.js optional native deps
     'bufferutil', 'utf-8-validate', 'zlib-sync', 'erlpack',

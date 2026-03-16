@@ -29,10 +29,26 @@ const PID_FILE = path.join(RUNTIME_DIR, 'bridge.pid');
  * Resolve the LLM provider based on the runtime setting.
  * - 'claude' (default): uses Claude Code SDK via SDKLLMProvider
  * - 'codex': uses @openai/codex-sdk via CodexProvider
- * - 'auto': tries Claude first, falls back to Codex
+ * - 'codebuddy': uses CodeBuddy Code CLI + @tencent-ai/agent-sdk via CodeBuddyLLMProvider
+ * - 'auto': tries Claude → Codex (CodeBuddy excluded — use CTI_RUNTIME=codebuddy explicitly)
  */
 async function resolveProvider(config: Config, pendingPerms: PendingPermissions): Promise<LLMProvider> {
   const runtime = config.runtime;
+
+  if (runtime === 'codebuddy') {
+    const { CodeBuddyLLMProvider, resolveCodebuddyCliPath } = await import('./codebuddy-provider.js');
+    const cliPath = resolveCodebuddyCliPath();
+    if (!cliPath) {
+      console.error(
+        '[claude-to-im] FATAL: Cannot find the `codebuddy` CLI executable.\n' +
+        '  Tried: CTI_CODEBUDDY_CODE_EXECUTABLE env, command -v codebuddy, common install paths\n' +
+        '  Fix: Install CodeBuddy Code CLI or set CTI_CODEBUDDY_CODE_EXECUTABLE=/path/to/codebuddy',
+      );
+      process.exit(1);
+    }
+    console.log(`[claude-to-im] Using CodeBuddy CLI: ${cliPath}`);
+    return new CodeBuddyLLMProvider(pendingPerms, cliPath, config.autoApprove);
+  }
 
   if (runtime === 'codex') {
     const { CodexProvider } = await import('./codex-provider.js');
@@ -40,6 +56,8 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
   }
 
   if (runtime === 'auto') {
+    // Auto probes Claude → Codex only. CodeBuddy is not included because
+    // its CLI is not yet widely distributed — opt in via CTI_RUNTIME=codebuddy.
     const cliPath = resolveClaudeCliPath();
     if (cliPath) {
       // Auto mode: preflight the resolved CLI before committing to it.
