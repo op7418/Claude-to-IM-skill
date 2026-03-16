@@ -109,7 +109,9 @@ case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*)
     # Windows detected via Git Bash / MSYS2 / Cygwin — delegate to PowerShell
     echo "Windows detected. Delegating to supervisor-windows.ps1..."
-    powershell.exe -ExecutionPolicy Bypass -File "$SKILL_DIR/scripts/supervisor-windows.ps1" "$@"
+    PWSH_CMD="pwsh"
+    command -v pwsh >/dev/null 2>&1 || PWSH_CMD="powershell.exe"
+    "$PWSH_CMD" -ExecutionPolicy Bypass -File "$SKILL_DIR/scripts/supervisor-windows.ps1" "$@"
     exit $?
     ;;
   *)
