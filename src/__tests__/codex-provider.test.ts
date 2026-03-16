@@ -331,6 +331,144 @@ describe('CodexProvider', () => {
     }
   });
 
+  it('uses workspace-write sandbox in acceptEdits mode', async () => {
+    const { CodexProvider } = await import('../codex-provider.js');
+    const { PendingPermissions } = await import('../permission-gateway.js');
+    const provider = new CodexProvider(new PendingPermissions());
+
+    let capturedStartOptions: Record<string, unknown> | undefined;
+    const mockThread = {
+      runStreamed: () => ({
+        events: (async function* () {
+          yield { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0 } };
+        })(),
+      }),
+    };
+
+    (provider as any).sdk = { Codex: class { constructor() {} } };
+    (provider as any).codex = {
+      startThread: (opts: Record<string, unknown>) => {
+        capturedStartOptions = opts;
+        return mockThread;
+      },
+    };
+
+    const stream = provider.streamChat({
+      prompt: 'edit files',
+      sessionId: 'workspace-write-session',
+      permissionMode: 'acceptEdits',
+      workingDirectory: '/tmp/project',
+    });
+
+    await collectStream(stream);
+
+    assert.equal(capturedStartOptions?.approvalPolicy, 'on-failure');
+    assert.equal(capturedStartOptions?.sandboxMode, 'workspace-write');
+    assert.equal(capturedStartOptions?.workingDirectory, '/tmp/project');
+  });
+
+  it('keeps sandbox unset outside acceptEdits mode', async () => {
+    const { CodexProvider } = await import('../codex-provider.js');
+    const { PendingPermissions } = await import('../permission-gateway.js');
+    const provider = new CodexProvider(new PendingPermissions());
+
+    let capturedStartOptions: Record<string, unknown> | undefined;
+    const mockThread = {
+      runStreamed: () => ({
+        events: (async function* () {
+          yield { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0 } };
+        })(),
+      }),
+    };
+
+    (provider as any).sdk = { Codex: class { constructor() {} } };
+    (provider as any).codex = {
+      startThread: (opts: Record<string, unknown>) => {
+        capturedStartOptions = opts;
+        return mockThread;
+      },
+    };
+
+    const stream = provider.streamChat({
+      prompt: 'plan only',
+      sessionId: 'sandbox-default-session',
+      permissionMode: 'plan',
+    });
+
+    await collectStream(stream);
+
+    assert.equal(capturedStartOptions?.approvalPolicy, 'on-request');
+    assert.ok(!Object.prototype.hasOwnProperty.call(capturedStartOptions!, 'sandboxMode'));
+  });
+
+  it('uses never approval when autoApprove is enabled', async () => {
+    const { CodexProvider } = await import('../codex-provider.js');
+    const { PendingPermissions } = await import('../permission-gateway.js');
+    const provider = new CodexProvider(new PendingPermissions(), true);
+
+    let capturedStartOptions: Record<string, unknown> | undefined;
+    const mockThread = {
+      runStreamed: () => ({
+        events: (async function* () {
+          yield { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0 } };
+        })(),
+      }),
+    };
+
+    (provider as any).sdk = { Codex: class { constructor() {} } };
+    (provider as any).codex = {
+      startThread: (opts: Record<string, unknown>) => {
+        capturedStartOptions = opts;
+        return mockThread;
+      },
+    };
+
+    const stream = provider.streamChat({
+      prompt: 'run unattended',
+      sessionId: 'auto-approve-session',
+      permissionMode: 'plan',
+    });
+
+    await collectStream(stream);
+
+    assert.equal(capturedStartOptions?.approvalPolicy, 'never');
+    assert.ok(!Object.prototype.hasOwnProperty.call(capturedStartOptions!, 'sandboxMode'));
+  });
+
+  it('keeps workspace-write in acceptEdits even when autoApprove is enabled', async () => {
+    const { CodexProvider } = await import('../codex-provider.js');
+    const { PendingPermissions } = await import('../permission-gateway.js');
+    const provider = new CodexProvider(new PendingPermissions(), true);
+
+    let capturedStartOptions: Record<string, unknown> | undefined;
+    const mockThread = {
+      runStreamed: () => ({
+        events: (async function* () {
+          yield { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0 } };
+        })(),
+      }),
+    };
+
+    (provider as any).sdk = { Codex: class { constructor() {} } };
+    (provider as any).codex = {
+      startThread: (opts: Record<string, unknown>) => {
+        capturedStartOptions = opts;
+        return mockThread;
+      },
+    };
+
+    const stream = provider.streamChat({
+      prompt: 'edit unattended',
+      sessionId: 'auto-approve-edit-session',
+      permissionMode: 'acceptEdits',
+    });
+
+    await collectStream(stream);
+
+    assert.equal(capturedStartOptions?.approvalPolicy, 'never');
+    assert.equal(capturedStartOptions?.sandboxMode, 'workspace-write');
+  });
+
   it('retries with fresh thread when resume fails before any events', async () => {
     const { CodexProvider } = await import('../codex-provider.js');
     const { PendingPermissions } = await import('../permission-gateway.js');

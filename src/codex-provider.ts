@@ -37,17 +37,24 @@ type ThreadInstance = any;
 
 /**
  * Map bridge permission modes to Codex approval policies.
+ * - CTI auto-approve → 'never' (unattended; no interactive approval)
  * - 'acceptEdits' (code mode) → 'on-failure' (auto-approve most things)
  * - 'plan' → 'on-request' (ask before executing)
  * - 'default' (ask mode) → 'on-request'
  */
-function toApprovalPolicy(permissionMode?: string): string {
+function toApprovalPolicy(permissionMode?: string, autoApprove = false): string {
+  if (autoApprove) return 'never';
+
   switch (permissionMode) {
     case 'acceptEdits': return 'on-failure';
     case 'plan': return 'on-request';
     case 'default': return 'on-request';
     default: return 'on-request';
   }
+}
+
+function toSandboxMode(permissionMode?: string): string | undefined {
+  return permissionMode === 'acceptEdits' ? 'workspace-write' : undefined;
 }
 
 /** Whether to forward bridge model to Codex CLI. Default: false (use Codex current/default model). */
@@ -75,7 +82,7 @@ export class CodexProvider implements LLMProvider {
   /** Maps session IDs to Codex thread IDs for resume. */
   private threadIds = new Map<string, string>();
 
-  constructor(private pendingPerms: PendingPermissions) {}
+  constructor(private pendingPerms: PendingPermissions, private autoApprove = false) {}
 
   /**
    * Lazily load the Codex SDK. Throws a clear error if not installed.
@@ -133,12 +140,14 @@ export class CodexProvider implements LLMProvider {
               savedThreadId = undefined;
             }
 
-            const approvalPolicy = toApprovalPolicy(params.permissionMode);
+            const approvalPolicy = toApprovalPolicy(params.permissionMode, self.autoApprove);
+            const sandboxMode = toSandboxMode(params.permissionMode);
             const passModel = shouldPassModelToCodex();
 
             const threadOptions: Record<string, unknown> = {
               ...(passModel && params.model ? { model: params.model } : {}),
               ...(params.workingDirectory ? { workingDirectory: params.workingDirectory } : {}),
+              ...(sandboxMode ? { sandboxMode } : {}),
               approvalPolicy,
             };
 
