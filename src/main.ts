@@ -4,6 +4,24 @@
  * Assembles all DI implementations and starts the bridge.
  */
 
+// ── IPv4-only network fix ──────────────────────────────────────────
+// Node.js 22's built-in fetch (undici) prefers IPv6 when available.
+// In some network environments IPv6 routes to api.telegram.org (and
+// other external APIs) are unreachable, causing silent timeouts.
+// The `--dns-result-order=ipv4first` CLI flag does NOT affect undici.
+// Setting CTI_NET_FAMILY=4 forces all fetch() calls to use IPv4.
+// This block MUST run before any import that may trigger fetch().
+if (process.env.CTI_NET_FAMILY === '4') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Agent, setGlobalDispatcher } = require('undici') as typeof import('undici');
+    setGlobalDispatcher(new Agent({ connect: { family: 4 } as never }));
+    console.log('[claude-to-im] Network: forced IPv4 (CTI_NET_FAMILY=4)');
+  } catch {
+    console.warn('[claude-to-im] Warning: could not set IPv4-only dispatcher');
+  }
+}
+
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
