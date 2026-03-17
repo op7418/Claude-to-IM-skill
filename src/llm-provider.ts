@@ -6,6 +6,8 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKMessage, PermissionResult } from '@anthropic-ai/claude-agent-sdk';
@@ -346,49 +348,61 @@ export function resolveClaudeCliPath(): string | undefined {
 
 // ── Multi-modal prompt builder ──
 
-type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
+/** MIME → file extension for temp image files. */
+const MIME_EXT: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+};
 
-const SUPPORTED_IMAGE_TYPES = new Set<string>([
-  'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp',
-]);
+const SUPPORTED_IMAGE_TYPES = new Set<string>(Object.keys(MIME_EXT));
+
+/** Temp files created during the current request — cleaned up after query() completes. */
+const pendingTempFiles: string[] = [];
 
 /**
- * Build a prompt for query(). When files are present, returns an async
- * iterable that yields a single SDKUserMessage with multi-modal content
- * (image blocks + text). Otherwise returns the plain text string.
+ * Build a prompt for query(). When image files are present, saves them as
+ * temp files on disk and instructs Claude to read them via the Read tool.
+ * This avoids issues with base64 image content blocks through the CLI's
+ * stream-json stdin, which can cause exit code 1 failures.
  */
 function buildPrompt(
   text: string,
   files?: FileAttachment[],
-): string | AsyncIterable<{ type: 'user'; message: { role: 'user'; content: unknown[] }; parent_tool_use_id: null; session_id: string }> {
+): string {
   const imageFiles = files?.filter(f => SUPPORTED_IMAGE_TYPES.has(f.type));
   if (!imageFiles || imageFiles.length === 0) return text;
 
-  const contentBlocks: unknown[] = [];
-
+  // Save images to temp files so Claude Code can read them
+  const imagePaths: string[] = [];
   for (const file of imageFiles) {
-    contentBlocks.push({
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: (file.type === 'image/jpg' ? 'image/jpeg' : file.type) as ImageMediaType,
-        data: file.data,
-      },
-    });
+    const ext = MIME_EXT[file.type] || '.png';
+    const tmpPath = path.join(os.tmpdir(), `cti-img-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    fs.writeFileSync(tmpPath, Buffer.from(file.data, 'base64'));
+    pendingTempFiles.push(tmpPath);
+    imagePaths.push(tmpPath);
   }
 
-  if (text.trim()) {
-    contentBlocks.push({ type: 'text', text });
+  // Build prompt that asks Claude to read the image files
+  const imageRefs = imagePaths.map((p, i) =>
+    imageFiles.length === 1 ? `Image: ${p}` : `Image ${i + 1}: ${p}`
+  ).join('\n');
+
+  const userText = text && text.trim() && text.trim() !== 'Describe this image.'
+    ? text.trim()
+    : '请查看并描述这张图片的内容。';
+
+  return `${userText}\n\n${imageRefs}\n\nPlease use the Read tool to view the image file(s) above, then respond based on the image content.`;
+}
+
+/** Clean up any temp image files created by buildPrompt. */
+function cleanupTempImages(): void {
+  while (pendingTempFiles.length > 0) {
+    const p = pendingTempFiles.pop()!;
+    try { fs.unlinkSync(p); } catch { /* ignore */ }
   }
-
-  const msg = {
-    type: 'user' as const,
-    message: { role: 'user' as const, content: contentBlocks },
-    parent_tool_use_id: null,
-    session_id: '',
-  };
-
-  return (async function* () { yield msg; })();
 }
 
 /**
@@ -514,7 +528,7 @@ export class SDKLLMProvider implements LLMProvider {
 
             const prompt = buildPrompt(params.prompt, params.files);
             const q = query({
-              prompt: prompt as Parameters<typeof query>[0]['prompt'],
+              prompt,
               options: queryOptions as Parameters<typeof query>[0]['options'],
             });
 
@@ -522,8 +536,10 @@ export class SDKLLMProvider implements LLMProvider {
               handleMessage(msg, controller, state);
             }
 
+            cleanupTempImages();
             controller.close();
           } catch (err) {
+            cleanupTempImages();
             const message = err instanceof Error ? err.message : String(err);
             console.error('[llm-provider] SDK query error:', err instanceof Error ? err.stack || err.message : err);
             if (stderrBuf) {
