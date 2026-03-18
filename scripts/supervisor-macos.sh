@@ -51,6 +51,24 @@ build_env_dict() {
           dict+="${indent}<key>${name}</key>\n${indent}<string>${val}</string>\n"
           ;; esac
       done < <(env)
+      # Forward AWS_* vars for AWS Bedrock users (CLAUDE_CODE_USE_BEDROCK=1).
+      while IFS='=' read -r name val; do
+        case "$name" in AWS_*)
+          dict+="${indent}<key>${name}</key>\n${indent}<string>${val}</string>\n"
+          ;; esac
+      done < <(env)
+      # Forward Google Cloud / Vertex AI vars for Vertex users (CLAUDE_CODE_USE_VERTEX=1).
+      while IFS='=' read -r name val; do
+        case "$name" in GOOGLE_*|GCLOUD_*|CLOUDSDK_*)
+          dict+="${indent}<key>${name}</key>\n${indent}<string>${val}</string>\n"
+          ;; esac
+      done < <(env)
+      # Forward Claude Code provider-switch flags.
+      for var in CLAUDE_CODE_USE_BEDROCK CLAUDE_CODE_USE_VERTEX ANTHROPIC_VERTEX_PROJECT_ID CLOUD_ML_REGION; do
+        local val="${!var:-}"
+        [ -z "$val" ] && continue
+        dict+="${indent}<key>${var}</key>\n${indent}<string>${val}</string>\n"
+      done
       ;;
   esac
 
