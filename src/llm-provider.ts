@@ -422,16 +422,24 @@ export interface StreamState {
 export class SDKLLMProvider implements LLMProvider {
   private cliPath: string | undefined;
   private autoApprove: boolean;
+  private autoApproveTools: Set<string>;
 
-  constructor(private pendingPerms: PendingPermissions, cliPath?: string, autoApprove = false) {
+  constructor(
+    private pendingPerms: PendingPermissions,
+    cliPath?: string,
+    autoApprove = false,
+    autoApproveTools: string[] = [],
+  ) {
     this.cliPath = cliPath;
     this.autoApprove = autoApprove;
+    this.autoApproveTools = new Set(autoApproveTools);
   }
 
   streamChat(params: StreamChatParams): ReadableStream<string> {
     const pendingPerms = this.pendingPerms;
     const cliPath = this.cliPath;
     const autoApprove = this.autoApprove;
+    const autoApproveTools = this.autoApproveTools;
 
     return new ReadableStream({
       start(controller) {
@@ -486,6 +494,11 @@ export class SDKLLMProvider implements LLMProvider {
                     return { behavior: 'allow' as const, updatedInput: input };
                   }
 
+                  // Auto-approve tools in the whitelist (e.g. read-only tools)
+                  if (autoApproveTools.has(toolName)) {
+                    return { behavior: 'allow' as const, updatedInput: input };
+                  }
+
                   // Emit permission_request SSE event for the bridge
                   controller.enqueue(
                     sseEvent('permission_request', {
@@ -498,10 +511,13 @@ export class SDKLLMProvider implements LLMProvider {
 
                   // Block until IM user responds
                   const result = await pendingPerms.waitFor(opts.toolUseID);
+                  console.info(`[llm-provider] canUseTool resolved: tool=${toolName} id=${opts.toolUseID.slice(0, 12)} behavior=${result.behavior}`);
 
                   if (result.behavior === 'allow') {
+                    console.info(`[llm-provider] canUseTool returning allow for ${toolName}`);
                     return { behavior: 'allow' as const, updatedInput: input };
                   }
+                  console.info(`[llm-provider] canUseTool returning deny for ${toolName}`);
                   return {
                     behavior: 'deny' as const,
                     message: result.message || 'Denied by user',
@@ -660,6 +676,7 @@ export function handleMessage(
       if (Array.isArray(content)) {
         for (const block of content) {
           if (typeof block === 'object' && block !== null && 'type' in block && block.type === 'tool_result') {
+            console.info(`[llm-provider] Received tool_result for ${(block as any).tool_use_id?.slice(0, 12)}`);
             const rb = block as { tool_use_id: string; content?: unknown; is_error?: boolean };
             const text = typeof rb.content === 'string'
               ? rb.content

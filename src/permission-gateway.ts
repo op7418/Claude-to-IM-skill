@@ -16,16 +16,19 @@ export class PendingPermissions {
   private timeoutMs = 5 * 60 * 1000; // 5 minutes
 
   waitFor(toolUseID: string): Promise<PermissionResult> {
+    console.info(`[permission-gateway] waitFor: ${toolUseID.slice(0, 16)}... (pending size: ${this.pending.size})`);
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.pending.delete(toolUseID);
         resolve({ behavior: 'deny', message: 'Permission request timed out' });
       }, this.timeoutMs);
       this.pending.set(toolUseID, { resolve, timer });
+      console.info(`[permission-gateway] waitFor set: ${toolUseID.slice(0, 16)}... (pending size now: ${this.pending.size})`);
     });
   }
 
   resolve(permissionRequestId: string, resolution: PermissionResolution): boolean {
+    console.info(`[permission-gateway] resolve called: ${permissionRequestId.slice(0, 16)}... pending keys: ${[...this.pending.keys()].map(k => k.slice(0, 16)).join(', ')}`);
     const entry = this.pending.get(permissionRequestId);
     if (!entry) return false;
     clearTimeout(entry.timer);

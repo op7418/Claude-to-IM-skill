@@ -30,6 +30,8 @@ export interface Config {
   qqMaxImageSize?: number;
   // Auto-approve all tool permission requests without user confirmation
   autoApprove?: boolean;
+  // Comma-separated list of tool names to auto-approve (e.g. "Read,Glob,Grep")
+  autoApproveTools?: string[];
 }
 
 export const CTI_HOME = process.env.CTI_HOME || path.join(os.homedir(), ".claude-to-im");
@@ -105,6 +107,7 @@ export function loadConfig(): Config {
       ? Number(env.get("CTI_QQ_MAX_IMAGE_SIZE"))
       : undefined,
     autoApprove: env.get("CTI_AUTO_APPROVE") === "true",
+    autoApproveTools: splitCsv(env.get("CTI_AUTO_APPROVE_TOOLS")),
   };
 }
 
@@ -159,6 +162,12 @@ export function saveConfig(config: Config): void {
     out += formatEnvLine("CTI_QQ_IMAGE_ENABLED", String(config.qqImageEnabled));
   if (config.qqMaxImageSize !== undefined)
     out += formatEnvLine("CTI_QQ_MAX_IMAGE_SIZE", String(config.qqMaxImageSize));
+
+  // ── Permission ──
+  if (config.autoApprove)
+    out += formatEnvLine("CTI_AUTO_APPROVE", "true");
+  if (config.autoApproveTools?.length)
+    out += formatEnvLine("CTI_AUTO_APPROVE_TOOLS", config.autoApproveTools.join(","));
 
   fs.mkdirSync(CTI_HOME, { recursive: true });
   const tmpPath = CONFIG_PATH + ".tmp";
