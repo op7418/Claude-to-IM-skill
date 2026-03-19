@@ -24,7 +24,8 @@ Claude Code / Codex → 读写你的代码库
 
 - **四大 IM 平台** — Telegram、Discord、飞书、QQ，可任意组合启用
 - **交互式配置** — 引导式向导逐步收集 token，附带详细获取说明
-- **权限控制** — 工具调用需要在聊天中通过内联按钮（Telegram/Discord）或文本 `/perm` 命令（飞书/QQ）明确批准
+- **权限控制** — 工具调用需要在聊天中通过内联按钮（Telegram/Discord/飞书）或文本 `/perm` 命令（QQ）明确批准
+- **工具白名单** — 可配置自动批准特定工具（如 `Read,Glob,Grep`），跳过权限提示
 - **流式预览** — 实时查看 Claude 的输出（Telegram 和 Discord 支持）
 - **会话持久化** — 对话在守护进程重启后保留
 - **密钥保护** — token 以 `chmod 600` 存储，日志中自动脱敏
@@ -114,7 +115,7 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 
 打开 IM 应用，给你的机器人发消息，Claude Code 会回复。
 
-当 Claude 需要使用工具（编辑文件、运行命令）时，聊天中会弹出带有 **允许** / **拒绝** 按钮的权限请求（Telegram/Discord），或文本 `/perm` 命令提示（飞书/QQ）。
+当 Claude 需要使用工具（编辑文件、运行命令）时，聊天中会弹出带有 **允许** / **拒绝** 按钮的权限请求（Telegram/Discord/飞书），或文本 `/perm` 命令提示（QQ）。
 
 ## 命令列表
 
@@ -155,7 +156,7 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 2. 创建自建应用 → 获取 App ID 和 App Secret
 3. **批量添加权限**：进入"权限管理" → 使用批量配置添加所有必需权限（`setup` 向导提供完整 JSON）
 4. 在"添加应用能力"中启用机器人
-5. **事件与回调**：选择**长连接**作为事件订阅方式 → 添加 `im.message.receive_v1` 事件
+5. **事件与回调**：选择**长连接**作为事件订阅方式 → 添加 `im.message.receive_v1` 事件和 `card.action.trigger` 回调（交互式权限按钮需要）
 6. **发布**：进入"版本管理与发布" → 创建版本 → 提交审核 → 在管理后台审核通过
 7. **注意**：版本审核通过并发布后机器人才能使用
 
@@ -197,6 +198,7 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 | `src/codex-provider.ts` | Codex SDK `runStreamed()` → SSE 流 |
 | `src/sse-utils.ts` | 共享的 SSE 格式化辅助函数 |
 | `src/permission-gateway.ts` | 异步桥接：SDK `canUseTool` ↔ IM 按钮 |
+| `src/feishu-card-patch.ts` | 飞书交互式卡片按钮（Schema 1.0 + WS/REST 补丁） |
 | `src/logger.ts` | 密钥脱敏的文件日志，支持轮转 |
 | `scripts/daemon.sh` | 进程管理（start/stop/status/logs） |
 | `scripts/doctor.sh` | 诊断检查 |
@@ -212,6 +214,8 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 5. 用户点击允许 → Bridge 解除权限等待
 6. SDK 继续执行工具 → 结果流式发回 IM
 ```
+
+**飞书说明：** 飞书使用 Schema 1.0 交互式卡片，带有彩色操作按钮（允许 / 本次会话允许 / 拒绝）。按钮点击在 WebSocket 协议层拦截——Bridge 先发送空 WS 确认帧，再通过 REST API 更新卡片（禁用按钮、显示结果）。这解决了飞书的已知问题：将卡片数据放在 WS 响应中会导致卡片闪绿后恢复。
 
 ## 故障排查
 

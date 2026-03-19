@@ -24,7 +24,8 @@ Claude Code / Codex → reads/writes your codebase
 
 - **Four IM platforms** — Telegram, Discord, Feishu/Lark, QQ — enable any combination
 - **Interactive setup** — guided wizard collects tokens with step-by-step instructions
-- **Permission control** — tool calls require explicit approval via inline buttons (Telegram/Discord) or text `/perm` commands (Feishu/QQ)
+- **Permission control** — tool calls require explicit approval via inline buttons (Telegram/Discord/Feishu) or text `/perm` commands (QQ)
+- **Auto-approve tools** — optionally whitelist specific tools (e.g. `Read,Glob,Grep`) to skip permission prompts
 - **Streaming preview** — see Claude's response as it types (Telegram & Discord)
 - **Session persistence** — conversations survive daemon restarts
 - **Secret protection** — tokens stored with `chmod 600`, auto-redacted in all logs
@@ -114,7 +115,7 @@ The daemon starts in the background. You can close the terminal — it keeps run
 
 Open your IM app and send a message to your bot. Claude Code will respond.
 
-When Claude needs to use a tool (edit a file, run a command), you'll see a permission prompt with **Allow** / **Deny** buttons right in the chat (Telegram/Discord), or a text `/perm` command prompt (Feishu/QQ).
+When Claude needs to use a tool (edit a file, run a command), you'll see a permission prompt with **Allow** / **Deny** buttons right in the chat (Telegram/Discord/Feishu), or a text `/perm` command prompt (QQ).
 
 ## Commands
 
@@ -155,7 +156,7 @@ The `setup` wizard provides inline guidance for every step. Here's a summary:
 2. Create Custom App → get App ID and App Secret
 3. **Batch-add permissions**: go to "Permissions & Scopes" → use batch configuration to add all required scopes (the `setup` wizard provides the exact JSON)
 4. Enable Bot feature under "Add Features"
-5. **Events & Callbacks**: select **"Long Connection"** as event dispatch method → add `im.message.receive_v1` event
+5. **Events & Callbacks**: select **"Long Connection"** as event dispatch method → add `im.message.receive_v1` event and `card.action.trigger` callback (needed for interactive permission buttons)
 6. **Publish**: go to "Version Management & Release" → create version → submit for review → approve in Admin Console
 7. **Important**: The bot will NOT work until the version is approved and published
 
@@ -197,6 +198,7 @@ The `setup` wizard provides inline guidance for every step. Here's a summary:
 | `src/codex-provider.ts` | Codex SDK `runStreamed()` → SSE stream |
 | `src/sse-utils.ts` | Shared SSE formatting helper |
 | `src/permission-gateway.ts` | Async bridge: SDK `canUseTool` ↔ IM buttons |
+| `src/feishu-card-patch.ts` | Feishu interactive card buttons (Schema 1.0 + WS/REST patch) |
 | `src/logger.ts` | Secret-redacted file logging with rotation |
 | `scripts/daemon.sh` | Process management (start/stop/status/logs) |
 | `scripts/doctor.sh` | Health checks |
@@ -212,6 +214,8 @@ The `setup` wizard provides inline guidance for every step. Here's a summary:
 5. User taps Allow → bridge resolves the pending permission
 6. SDK continues tool execution → result streamed back to IM
 ```
+
+**Feishu note:** Feishu uses Schema 1.0 interactive cards with colored action buttons (Allow / Allow Session / Deny). Button clicks are intercepted at the WebSocket protocol level — the bridge sends an empty WS ack, then patches the card via REST API after a short delay to update the UI (disable buttons, show result). This avoids a known Feishu issue where card data in WS responses causes the card to flash then revert.
 
 ## Troubleshooting
 
