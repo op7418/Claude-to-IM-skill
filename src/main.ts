@@ -9,6 +9,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 import { initBridgeContext } from 'claude-to-im/src/lib/bridge/context.js';
+// Patch EventDispatcher.prototype.invoke BEFORE any adapter starts (side-effect)
+import { patchFeishuAdapter } from './feishu-card-patch.js';
 import * as bridgeManager from 'claude-to-im/src/lib/bridge/bridge-manager.js';
 // Side-effect import to trigger adapter self-registration
 import 'claude-to-im/src/lib/bridge/adapters/index.js';
@@ -46,7 +48,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
       const check = preflightCheck(cliPath);
       if (check.ok) {
         console.log(`[claude-to-im] Auto: using Claude CLI at ${cliPath} (${check.version})`);
-        return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove);
+        return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove, config.autoApproveTools);
       }
       // Preflight failed — fall through to Codex instead of silently using a broken CLI
       console.warn(
@@ -91,7 +93,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
     process.exit(1);
   }
 
-  return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove);
+  return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove, config.autoApproveTools);
 }
 
 interface StatusInfo {
@@ -158,6 +160,21 @@ async function main(): Promise<void> {
   });
 
   await bridgeManager.start();
+
+  // Patch Feishu adapter for interactive card buttons
+  try {
+    const state = (globalThis as any).__bridge_manager__;
+    const adapters = state?.adapters;
+    if (adapters) {
+      for (const [type, adapter] of adapters) {
+        if (type === 'feishu') {
+          patchFeishuAdapter(adapter);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[feishu-card-patch] Failed to patch adapter:', err instanceof Error ? err.message : err);
+  }
 
   // Graceful shutdown
   let shuttingDown = false;
