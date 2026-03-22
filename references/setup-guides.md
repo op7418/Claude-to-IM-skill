@@ -249,3 +249,78 @@ When enabled, images sent by users in QQ private chat will be forwarded to the A
 ### Max Image Size MB (optional)
 
 Default: `20`. Maximum image file size in MB that will be forwarded to the AI agent. Images larger than this limit are ignored.
+
+---
+
+## WeChat
+
+> **Note for setup wizard:** AskUserQuestion only supports up to 4 checkbox options.
+> Since there are now 5 channels (telegram, discord, feishu, qq, wechat), you cannot
+> list them all as checkboxes. Instead, use a **text input** question for channel
+> selection (e.g. "Which channels do you want to enable? Enter comma-separated names:
+> telegram, discord, feishu, qq, wechat") so that all 5 channels are visible and selectable.
+
+WeChat integration uses the official ClawBot ilink API to bridge messages from your personal WeChat account to Claude.
+
+### Prerequisites
+
+- iOS WeChat (latest version with ClawBot plugin enabled)
+- Node.js >= 20 (for the QR login script)
+- `qrcode-terminal` npm package (for terminal QR display)
+
+### Environment check (run before QR login)
+
+Before asking the user to scan, verify the environment is ready. Run these checks via Bash:
+
+1. **Node.js**: `node --version` — must be >= 20. If missing or too old:
+   - macOS: `brew install node`
+   - Or: `curl -fsSL https://fnm.vercel.app/install | bash && fnm install --lts`
+   - Tell the user which command to run and wait for them to install.
+
+2. **qrcode-terminal**: `node -e "require('qrcode-terminal')" 2>&1` — if it fails:
+   - Run: `cd "SKILL_DIR" && npm install qrcode-terminal` (replace SKILL_DIR with actual path)
+   - This is a lightweight package, safe to install automatically via Bash without asking.
+
+3. **Script exists**: `test -f "SKILL_DIR/scripts/wechat-login.mjs"` — if missing, the skill installation may be incomplete. Tell the user to reinstall the skill.
+
+Only proceed to QR login after all checks pass.
+
+### How to get the token
+
+The WeChat token is obtained via QR code scan — it is NOT something you can find in a dashboard.
+
+**Important:** The QR login script must be run by the user in a **separate terminal window** (not via the Bash tool and not with `!` prefix — those won't show the QR code interactively). After environment checks pass, tell the user:
+
+> Please open a new terminal window and run:
+> ```
+> node "<SKILL_DIR>/scripts/wechat-login.mjs"
+> ```
+> (replace `<SKILL_DIR>` with the actual path shown above)
+>
+> A QR code will appear. Scan it with WeChat on your iPhone.
+> After login succeeds, copy the last line of JSON output and paste it back here.
+
+The script will:
+1. Display a QR code in the terminal
+2. Wait for the user to scan with WeChat on iOS
+3. On success, print a single JSON line to stdout: `{"token":"...","baseUrl":"...","accountId":"...","userId":"..."}`
+
+After the user pastes the JSON, parse it to extract the `token` field.
+
+The token looks like: `<account_id>@im.bot:<hex_string>`
+
+### Base URL (optional)
+
+Default: `https://ilinkai.weixin.qq.com`. Only change this if Tencent provides a different endpoint.
+
+### Allowed User IDs (optional)
+
+WeChat user IDs look like `<openid>@im.wechat`. You can find your user ID in the bridge logs after sending your first message. Leave empty to allow all users.
+
+### Limitations
+
+- WeChat ClawBot only supports iOS WeChat (latest version)
+- Each ClawBot can only connect one agent instance
+- No inline permission buttons — uses numeric text shortcuts (1/2/3)
+- No streaming preview
+- Text messages only (no images)

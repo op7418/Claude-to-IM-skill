@@ -28,6 +28,11 @@ export interface Config {
   qqAllowedUsers?: string[];
   qqImageEnabled?: boolean;
   qqMaxImageSize?: number;
+  // WeChat
+  wechatToken?: string;
+  wechatBaseUrl?: string;
+  wechatAccountId?: string;
+  wechatAllowedUsers?: string[];
   // Auto-approve all tool permission requests without user confirmation
   autoApprove?: boolean;
 }
@@ -104,6 +109,10 @@ export function loadConfig(): Config {
     qqMaxImageSize: env.get("CTI_QQ_MAX_IMAGE_SIZE")
       ? Number(env.get("CTI_QQ_MAX_IMAGE_SIZE"))
       : undefined,
+    wechatToken: env.get("CTI_WECHAT_TOKEN") || undefined,
+    wechatBaseUrl: env.get("CTI_WECHAT_BASE_URL") || undefined,
+    wechatAccountId: env.get("CTI_WECHAT_ACCOUNT_ID") || undefined,
+    wechatAllowedUsers: splitCsv(env.get("CTI_WECHAT_ALLOWED_USERS")),
     autoApprove: env.get("CTI_AUTO_APPROVE") === "true",
   };
 }
@@ -159,6 +168,13 @@ export function saveConfig(config: Config): void {
     out += formatEnvLine("CTI_QQ_IMAGE_ENABLED", String(config.qqImageEnabled));
   if (config.qqMaxImageSize !== undefined)
     out += formatEnvLine("CTI_QQ_MAX_IMAGE_SIZE", String(config.qqMaxImageSize));
+  out += formatEnvLine("CTI_WECHAT_TOKEN", config.wechatToken);
+  out += formatEnvLine("CTI_WECHAT_BASE_URL", config.wechatBaseUrl);
+  out += formatEnvLine("CTI_WECHAT_ACCOUNT_ID", config.wechatAccountId);
+  out += formatEnvLine(
+    "CTI_WECHAT_ALLOWED_USERS",
+    config.wechatAllowedUsers?.join(",")
+  );
 
   fs.mkdirSync(CTI_HOME, { recursive: true });
   const tmpPath = CONFIG_PATH + ".tmp";
@@ -239,6 +255,19 @@ export function configToSettings(config: Config): Map<string, string> {
     m.set("bridge_qq_image_enabled", String(config.qqImageEnabled));
   if (config.qqMaxImageSize !== undefined)
     m.set("bridge_qq_max_image_size", String(config.qqMaxImageSize));
+
+  // ── WeChat ──
+  // Upstream keys: bridge_wechat_enabled, bridge_wechat_token, bridge_wechat_base_url,
+  //   bridge_wechat_account_id, bridge_wechat_allowed_users
+  m.set(
+    "bridge_wechat_enabled",
+    config.enabledChannels.includes("wechat") ? "true" : "false"
+  );
+  if (config.wechatToken) m.set("bridge_wechat_token", config.wechatToken);
+  if (config.wechatBaseUrl) m.set("bridge_wechat_base_url", config.wechatBaseUrl);
+  if (config.wechatAccountId) m.set("bridge_wechat_account_id", config.wechatAccountId);
+  if (config.wechatAllowedUsers)
+    m.set("bridge_wechat_allowed_users", config.wechatAllowedUsers.join(","));
 
   // ── Defaults ──
   // Upstream keys: bridge_default_work_dir, bridge_default_model, default_model
