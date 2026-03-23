@@ -28,6 +28,9 @@ export interface Config {
   qqAllowedUsers?: string[];
   qqImageEnabled?: boolean;
   qqMaxImageSize?: number;
+  // WeChat
+  wechatBotToken?: string;
+  wechatAllowedUsers?: string[];
   // Auto-approve all tool permission requests without user confirmation
   autoApprove?: boolean;
 }
@@ -104,6 +107,8 @@ export function loadConfig(): Config {
     qqMaxImageSize: env.get("CTI_QQ_MAX_IMAGE_SIZE")
       ? Number(env.get("CTI_QQ_MAX_IMAGE_SIZE"))
       : undefined,
+    wechatBotToken: env.get("CTI_WECHAT_BOT_TOKEN") || undefined,
+    wechatAllowedUsers: splitCsv(env.get("CTI_WECHAT_ALLOWED_USERS")),
     autoApprove: env.get("CTI_AUTO_APPROVE") === "true",
   };
 }
@@ -159,6 +164,11 @@ export function saveConfig(config: Config): void {
     out += formatEnvLine("CTI_QQ_IMAGE_ENABLED", String(config.qqImageEnabled));
   if (config.qqMaxImageSize !== undefined)
     out += formatEnvLine("CTI_QQ_MAX_IMAGE_SIZE", String(config.qqMaxImageSize));
+  out += formatEnvLine("CTI_WECHAT_BOT_TOKEN", config.wechatBotToken);
+  out += formatEnvLine(
+    "CTI_WECHAT_ALLOWED_USERS",
+    config.wechatAllowedUsers?.join(",")
+  );
 
   fs.mkdirSync(CTI_HOME, { recursive: true });
   const tmpPath = CONFIG_PATH + ".tmp";
@@ -239,6 +249,15 @@ export function configToSettings(config: Config): Map<string, string> {
     m.set("bridge_qq_image_enabled", String(config.qqImageEnabled));
   if (config.qqMaxImageSize !== undefined)
     m.set("bridge_qq_max_image_size", String(config.qqMaxImageSize));
+
+  // ── WeChat ──
+  m.set(
+    "bridge_wechat_enabled",
+    config.enabledChannels.includes("wechat") ? "true" : "false"
+  );
+  if (config.wechatBotToken) m.set("wechat_bot_token", config.wechatBotToken);
+  if (config.wechatAllowedUsers)
+    m.set("wechat_bridge_allowed_users", config.wechatAllowedUsers.join(","));
 
   // ── Defaults ──
   // Upstream keys: bridge_default_work_dir, bridge_default_model, default_model
