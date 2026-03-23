@@ -13,4 +13,4 @@ param(
 )
 
 $supervisorScript = Join-Path (Split-Path -Parent $PSCommandPath) 'supervisor-windows.ps1'
-& $supervisorScript $Command $LogLines
+& $supervisorScript -Command $Command -LogLines $LogLines

@@ -33,8 +33,8 @@ $SkillDir   = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $RuntimeDir = Join-Path $CtiHome 'runtime'
 $PidFile    = Join-Path $RuntimeDir 'bridge.pid'
 $StatusFile = Join-Path $RuntimeDir 'status.json'
-$LogFile    = Join-Path $CtiHome 'logs' 'bridge.log'
-$DaemonMjs  = Join-Path $SkillDir 'dist' 'daemon.mjs'
+$LogFile    = Join-Path (Join-Path $CtiHome 'logs') 'bridge.log'
+$DaemonMjs  = Join-Path (Join-Path $SkillDir 'dist') 'daemon.mjs'
 
 $ServiceName = 'ClaudeToIMBridge'
 
@@ -72,9 +72,9 @@ function Read-Pid {
 }
 
 function Test-PidAlive {
-    param([string]$Pid)
-    if (-not $Pid) { return $false }
-    try { $null = Get-Process -Id ([int]$Pid) -ErrorAction Stop; return $true }
+    param([string]$ProcessIdValue)
+    if (-not $ProcessIdValue) { return $false }
+    try { $null = Get-Process -Id ([int]$ProcessIdValue) -ErrorAction Stop; return $true }
     catch { return $false }
 }
 
@@ -121,6 +121,12 @@ function Get-NodePath {
 
 function Find-ServiceManager {
     # Prefer WinSW, then NSSM
+    $localWinSW = Join-Path $SkillDir 'tools\WinSW.exe'
+    if (Test-Path $localWinSW) { return @{ type = 'winsw'; path = $localWinSW } }
+
+    $bundledWinSW = Join-Path $SkillDir "$ServiceName.exe"
+    if (Test-Path $bundledWinSW) { return @{ type = 'winsw'; path = $bundledWinSW } }
+
     $winsw = Get-Command 'WinSW.exe' -ErrorAction SilentlyContinue
     if ($winsw) { return @{ type = 'winsw'; path = $winsw.Source } }
 
@@ -135,11 +141,8 @@ function Install-WinSWService {
     $nodePath = Get-NodePath
     $xmlPath = Join-Path $SkillDir "$ServiceName.xml"
 
-    # Run as current user so the service can access ~/.claude-to-im and Codex login state
-    $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-    Write-Host "Service will run as: $currentUser"
-    $cred = Get-Credential -UserName $currentUser -Message "Enter password for '$currentUser' (required for Windows Service logon)"
-    $plainPwd = $cred.GetNetworkCredential().Password
+    Write-Host "Service will run as: LocalSystem"
+    Write-Host "  USERPROFILE / APPDATA / LOCALAPPDATA are redirected to the current user's paths so Codex state remains available."
 
     # Generate WinSW config XML
     @"
@@ -150,11 +153,6 @@ function Install-WinSWService {
   <executable>$nodePath</executable>
   <arguments>$DaemonMjs</arguments>
   <workingdirectory>$SkillDir</workingdirectory>
-  <serviceaccount>
-    <username>$currentUser</username>
-    <password>$([System.Security.SecurityElement]::Escape($plainPwd))</password>
-    <allowservicelogon>true</allowservicelogon>
-  </serviceaccount>
   <env name="USERPROFILE" value="$env:USERPROFILE"/>
   <env name="APPDATA" value="$env:APPDATA"/>
   <env name="LOCALAPPDATA" value="$env:LOCALAPPDATA"/>
@@ -176,7 +174,7 @@ function Install-WinSWService {
 
     & $winswCopy install
     Write-Host "Service '$ServiceName' installed via WinSW."
-    Write-Host "  Service account: $currentUser"
+    Write-Host "  Service account: LocalSystem"
     Write-Host "Start with:  & `"$winswCopy`" start"
     Write-Host "Or:          sc.exe start $ServiceName"
 }
@@ -185,15 +183,11 @@ function Install-NSSMService {
     param([string]$NSSMPath)
     $nodePath = Get-NodePath
 
-    # Run as current user so the service can access ~/.claude-to-im and Codex login state
-    $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-    Write-Host "Service will run as: $currentUser"
-    $cred = Get-Credential -UserName $currentUser -Message "Enter password for '$currentUser' (required for Windows Service logon)"
-    $plainPwd = $cred.GetNetworkCredential().Password
+    Write-Host "Service will run as: LocalSystem"
+    Write-Host "  USERPROFILE / APPDATA / LOCALAPPDATA are redirected to the current user's paths so Codex state remains available."
 
     & $NSSMPath install $ServiceName $nodePath $DaemonMjs
     & $NSSMPath set $ServiceName AppDirectory $SkillDir
-    & $NSSMPath set $ServiceName ObjectName $currentUser $plainPwd
     & $NSSMPath set $ServiceName AppStdout $LogFile
     & $NSSMPath set $ServiceName AppStderr $LogFile
     & $NSSMPath set $ServiceName AppStdoutCreationDisposition 4
@@ -203,7 +197,7 @@ function Install-NSSMService {
     & $NSSMPath set $ServiceName AppEnvironmentExtra "USERPROFILE=$env:USERPROFILE" "APPDATA=$env:APPDATA" "LOCALAPPDATA=$env:LOCALAPPDATA" "CTI_HOME=$CtiHome"
 
     Write-Host "Service '$ServiceName' installed via NSSM."
-    Write-Host "  Service account: $currentUser"
+    Write-Host "  Service account: LocalSystem"
     Write-Host "Start with:  nssm start $ServiceName"
     Write-Host "Or:          sc.exe start $ServiceName"
 }
@@ -267,7 +261,7 @@ switch ($Command) {
             }
         } else {
             Write-Host "Starting bridge (background process)..."
-            $pid = Start-Fallback
+            $bridgePid = Start-Fallback
             Start-Sleep -Seconds 3
 
             $newPid = Read-Pid
@@ -294,10 +288,10 @@ switch ($Command) {
             Write-Host "Bridge stopped"
             if (Test-Path $PidFile) { Remove-Item $PidFile -Force }
         } else {
-            $pid = Read-Pid
-            if (-not $pid) { Write-Host "No bridge running"; exit 0 }
-            if (Test-PidAlive $pid) {
-                Stop-Process -Id ([int]$pid) -Force
+            $bridgePid = Read-Pid
+            if (-not $bridgePid) { Write-Host "No bridge running"; exit 0 }
+            if (Test-PidAlive $bridgePid) {
+                Stop-Process -Id ([int]$bridgePid) -Force
                 Write-Host "Bridge stopped"
             } else {
                 Write-Host "Bridge was not running (stale PID file)"
@@ -307,7 +301,7 @@ switch ($Command) {
     }
 
     'status' {
-        $pid = Read-Pid
+        $bridgePid = Read-Pid
 
         # Check Windows Service
         $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -315,8 +309,8 @@ switch ($Command) {
             Write-Host "Windows Service '$ServiceName': $($svc.Status)"
         }
 
-        if ($pid -and (Test-PidAlive $pid)) {
-            Write-Host "Bridge process is running (PID: $pid)"
+        if ($bridgePid -and (Test-PidAlive $bridgePid)) {
+            Write-Host "Bridge process is running (PID: $bridgePid)"
             if (Test-StatusRunning) {
                 Write-Host "Bridge status: running"
             } else {
