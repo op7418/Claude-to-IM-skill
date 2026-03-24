@@ -1,7 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import os from 'node:os';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 
 // ── SSE utils tests ─────────────────────────────────────────
 
@@ -48,19 +50,52 @@ function parseSSEChunks(chunks: string[]): Array<{ type: string; data: string }>
     .map(line => JSON.parse(line.slice(6)));
 }
 
+function createMockCodexChild() {
+  const child = new EventEmitter() as EventEmitter & {
+    stdout: PassThrough;
+    stderr: PassThrough;
+    stdin: PassThrough;
+    kill: (signal?: NodeJS.Signals) => boolean;
+    killedWith?: string;
+  };
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = new PassThrough();
+  child.kill = ((signal?: NodeJS.Signals) => {
+    child.killedWith = signal || 'SIGTERM';
+    queueMicrotask(() => child.emit('close', null, signal || 'SIGTERM'));
+    return true;
+  }) as (signal?: NodeJS.Signals) => boolean;
+  return child;
+}
+
+function emitCliEvents(
+  child: ReturnType<typeof createMockCodexChild>,
+  events: Array<Record<string, unknown>>,
+  closeCode = 0,
+): void {
+  queueMicrotask(() => {
+    for (const event of events) {
+      child.stdout.write(`${JSON.stringify(event)}\n`);
+    }
+    child.stdout.end();
+    child.stderr.end();
+    child.stdin.end();
+    child.emit('close', closeCode, null);
+  });
+}
+
 describe('CodexProvider', () => {
-  it('emits error when SDK init fails', async () => {
+  it('emits error when spawning the Codex CLI fails', async () => {
     const { CodexProvider } = await import('../codex-provider.js');
     const { PendingPermissions } = await import('../permission-gateway.js');
     const provider = new CodexProvider(new PendingPermissions());
 
-    // Force ensureSDK to fail by setting sdk to a broken module
-    (provider as any).sdk = { Codex: class { constructor() { throw new Error('Missing API key'); } } };
-    (provider as any).codex = null;
-    // Reset so ensureSDK re-runs the constructor
-    (provider as any).sdk = null;
-    // Override ensureSDK directly
-    (provider as any).ensureSDK = async () => { throw new Error('SDK init failed: Missing API key'); };
+    (provider as any).spawnCodexProcess = () => {
+      const child = createMockCodexChild();
+      queueMicrotask(() => child.emit('error', new Error('spawn codex ENOENT')));
+      return child;
+    };
 
     const stream = provider.streamChat({
       prompt: 'test',
@@ -72,7 +107,7 @@ describe('CodexProvider', () => {
 
     const errorEvent = events.find(e => e.type === 'error');
     assert.ok(errorEvent, 'Should emit an error event');
-    assert.ok(errorEvent!.data.includes('Missing API key'), 'Error should contain the cause');
+    assert.ok(errorEvent!.data.includes('ENOENT'), 'Error should contain the cause');
   });
 
   it('maps agent_message item to text SSE event', async () => {
@@ -512,7 +547,147 @@ describe('CodexProvider', () => {
       const events = parseSSEChunks(result.chunks);
       const errorEvent = events.find(e => e.type === 'error');
       assert.ok(errorEvent, 'Should emit an error event after the stream stalls');
-      assert.match(errorEvent.data, /stalled|timed out/i);
+      assert.match(errorEvent.data, /没有继续返回内容/);
+    } finally {
+      if (old === undefined) {
+        delete process.env.CTI_CODEX_STREAM_IDLE_TIMEOUT_MS;
+      } else {
+        process.env.CTI_CODEX_STREAM_IDLE_TIMEOUT_MS = old;
+      }
+    }
+  });
+});
+
+describe('CodexProvider CLI transport', () => {
+  it('ignores transient reconnect notices and still emits the final reply', async () => {
+    const { CodexProvider } = await import('../codex-provider.js');
+    const { PendingPermissions } = await import('../permission-gateway.js');
+    const provider = new CodexProvider(new PendingPermissions());
+
+    const child = createMockCodexChild();
+    let capturedArgs: string[] = [];
+    let promptFromStdin = '';
+    child.stdin.on('data', (chunk) => {
+      promptFromStdin += chunk.toString();
+    });
+
+    (provider as any).spawnCodexProcess = (args: string[]) => {
+      capturedArgs = args;
+      emitCliEvents(child, [
+        { type: 'thread.started', thread_id: 'cli-thread-1' },
+        { type: 'turn.started' },
+        { type: 'error', message: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' },
+        { type: 'item.completed', item: { id: 'transport-1', type: 'error', message: 'Falling back from WebSockets to HTTPS transport. timeout waiting for child process to exit' } },
+        { type: 'item.completed', item: { id: 'msg-1', type: 'agent_message', text: '你好' } },
+        { type: 'turn.completed', usage: { input_tokens: 2, output_tokens: 1, cached_input_tokens: 0 } },
+      ]);
+      return child;
+    };
+
+    const stream = provider.streamChat({
+      prompt: '请只回复：你好',
+      sessionId: 'cli-session',
+      workingDirectory: '/tmp/demo-workdir',
+      permissionMode: 'acceptEdits',
+    });
+
+    const events = parseSSEChunks(await collectStream(stream));
+    const textEvent = events.find(e => e.type === 'text');
+    const errorEvents = events.filter(e => e.type === 'error');
+
+    assert.equal(promptFromStdin, '请只回复：你好');
+    assert.ok(capturedArgs.includes('exec'));
+    assert.ok(capturedArgs.includes('--json'));
+    assert.ok(capturedArgs.includes('/tmp/demo-workdir'));
+    assert.ok(capturedArgs.includes('sandbox_mode="workspace-write"'));
+    assert.ok(capturedArgs.includes('approval_policy="never"'));
+    assert.equal(textEvent?.data, '你好');
+    assert.equal(errorEvents.length, 0, 'Transient transport notices should not surface to users');
+  });
+
+  it('retries with a fresh CLI thread when resume session is invalid', async () => {
+    const { CodexProvider } = await import('../codex-provider.js');
+    const { PendingPermissions } = await import('../permission-gateway.js');
+    const provider = new CodexProvider(new PendingPermissions());
+
+    const first = createMockCodexChild();
+    const second = createMockCodexChild();
+    const capturedArgs: string[][] = [];
+    let callCount = 0;
+
+    (provider as any).spawnCodexProcess = (args: string[]) => {
+      capturedArgs.push(args);
+      callCount += 1;
+      if (callCount === 1) {
+        emitCliEvents(first, [
+          { type: 'error', message: 'No such session' },
+        ], 1);
+        return first;
+      }
+
+      emitCliEvents(second, [
+        { type: 'thread.started', thread_id: 'fresh-cli-thread' },
+        { type: 'item.completed', item: { id: 'msg-2', type: 'agent_message', text: 'fresh reply' } },
+        { type: 'turn.completed', usage: { input_tokens: 3, output_tokens: 2, cached_input_tokens: 0 } },
+      ]);
+      return second;
+    };
+
+    const stream = provider.streamChat({
+      prompt: 'retry please',
+      sessionId: 'cli-retry-session',
+      sdkSessionId: 'stale-thread-id',
+    });
+
+    const events = parseSSEChunks(await collectStream(stream));
+    const textEvent = events.find(e => e.type === 'text');
+    const errorEvent = events.find(e => e.type === 'error');
+
+    assert.equal(capturedArgs.length, 2, 'Should invoke Codex twice after resume failure');
+    assert.deepEqual(capturedArgs[0].slice(0, 2), ['exec', 'resume']);
+    assert.equal(capturedArgs[1][0], 'exec');
+    assert.notEqual(capturedArgs[1][1], 'resume');
+    assert.equal(textEvent?.data, 'fresh reply');
+    assert.equal(errorEvent, undefined);
+  });
+
+  it('fails fast when the CLI stops emitting output after thread.started', async () => {
+    const old = process.env.CTI_CODEX_STREAM_IDLE_TIMEOUT_MS;
+    process.env.CTI_CODEX_STREAM_IDLE_TIMEOUT_MS = '50';
+
+    try {
+      const { CodexProvider } = await import('../codex-provider.js');
+      const { PendingPermissions } = await import('../permission-gateway.js');
+      const provider = new CodexProvider(new PendingPermissions());
+
+      const child = createMockCodexChild();
+      (provider as any).spawnCodexProcess = () => {
+        queueMicrotask(() => {
+          child.stdout.write(`${JSON.stringify({ type: 'thread.started', thread_id: 'cli-stalled-thread' })}\n`);
+        });
+        return child;
+      };
+
+      const stream = provider.streamChat({
+        prompt: 'hello',
+        sessionId: 'cli-stalled-session',
+      });
+
+      const result = await Promise.race([
+        collectStream(stream).then((chunks) => ({ kind: 'chunks' as const, chunks })),
+        new Promise<{ kind: 'timeout' }>((resolve) => setTimeout(() => resolve({ kind: 'timeout' }), 250)),
+      ]);
+
+      assert.notEqual(result.kind, 'timeout', 'CLI stream should fail fast instead of hanging forever');
+      if (result.kind !== 'chunks') {
+        return;
+      }
+
+      const events = parseSSEChunks(result.chunks);
+      const errorEvent = events.find(e => e.type === 'error');
+      assert.ok(errorEvent);
+      assert.match(errorEvent.data, /没有继续返回内容/);
+      assert.equal(child.killedWith, 'SIGTERM');
     } finally {
       if (old === undefined) {
         delete process.env.CTI_CODEX_STREAM_IDLE_TIMEOUT_MS;
@@ -552,6 +727,16 @@ describe('buildCodexCliEnv', () => {
       fs.rmSync(tmpUserHome, { recursive: true, force: true });
       fs.rmSync(tmpCtiHome, { recursive: true, force: true });
     }
+  });
+});
+
+describe('toUserVisibleCodexErrorMessage', () => {
+  it('localizes stalled stream errors for end users', async () => {
+    const { toUserVisibleCodexErrorMessage } = await import('../codex-provider.js');
+    assert.equal(
+      toUserVisibleCodexErrorMessage('Codex stream stalled after thread.started for 45000ms'),
+      'Codex 已开始处理，但在 45 秒内没有继续返回内容。请稍后重试。',
+    );
   });
 });
 
