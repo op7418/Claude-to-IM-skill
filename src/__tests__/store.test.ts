@@ -246,6 +246,40 @@ describe('JsonFileStore', () => {
     assert.equal(store.listPendingPermissionLinksByChat('chat-unknown').length, 0);
   });
 
+  it('listPendingPermissionLinksByChat filters unresolved links by chat', () => {
+    const store = new JsonFileStore(makeSettings());
+    store.insertPermissionLink({
+      permissionRequestId: 'pr-3',
+      channelType: 'dingtalk',
+      chatId: 'chat-1',
+      messageId: 'msg-3',
+      toolName: 'bash',
+      suggestions: '',
+    });
+    store.insertPermissionLink({
+      permissionRequestId: 'pr-4',
+      channelType: 'dingtalk',
+      chatId: 'chat-1',
+      messageId: 'msg-4',
+      toolName: 'bash',
+      suggestions: '',
+    });
+    store.insertPermissionLink({
+      permissionRequestId: 'pr-5',
+      channelType: 'dingtalk',
+      chatId: 'chat-2',
+      messageId: 'msg-5',
+      toolName: 'bash',
+      suggestions: '',
+    });
+
+    assert.equal(store.markPermissionLinkResolved('pr-4'), true);
+
+    const pending = store.listPendingPermissionLinksByChat('chat-1');
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0].permissionRequestId, 'pr-3');
+  });
+
   // ── Dedup ──
 
   it('dedup insert and check within window', () => {

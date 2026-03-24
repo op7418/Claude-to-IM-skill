@@ -1,7 +1,7 @@
 ---
 name: claude-to-im
 description: |
-  Bridge THIS Claude Code or Codex session to Telegram, Discord, Feishu/Lark, QQ, or WeChat so the
+  Bridge THIS Claude Code session to Telegram, Discord, Feishu/Lark, QQ, WeChat, or DingTalk so the
   user can chat with Claude from their phone. Use for: setting up, starting, stopping,
   or diagnosing the claude-to-im bridge daemon; forwarding Claude replies to a messaging
   app; any phrase like "claude-to-im", "bridge", "消息推送", "消息转发", "桥接",
@@ -77,11 +77,12 @@ When AskUserQuestion IS available, collect input **one field at a time**. After 
 
 **Step 1 — Choose channels**
 
-Ask which channels to enable (telegram, discord, feishu, qq, weixin). Accept comma-separated input. Briefly describe each:
+Ask which channels to enable (telegram, discord, feishu, qq, weixin, dingtalk). Accept comma-separated input. Briefly describe each:
 - **telegram** — Best for personal use. Streaming preview, inline permission buttons.
 - **discord** — Good for team use. Server/channel/user-level access control.
 - **feishu** (Lark) — For Feishu/Lark teams. Streaming cards, tool progress, inline permission buttons.
 - **qq** — QQ C2C private chat only. No inline permission buttons, no streaming preview. Permissions use text `/perm ...` commands.
+- **dingtalk** — For DingTalk teams. Stream mode with WebSocket long connection.
 - **weixin** — WeChat QR login. Single linked account only; a new login replaces the previous one. No inline permission buttons, no streaming preview. Permissions use text `/perm ...` commands or quick `1/2/3` replies. Voice messages only use WeChat's own speech-to-text text; raw voice audio is not transcribed by the bridge.
 
 **Step 2 — Collect tokens per channel**
@@ -111,6 +112,8 @@ For each enabled channel, collect one credential at a time. Tell the user where 
   5. Wait for the helper to report success, then confirm that the linked account was saved locally.
   - Explain briefly: the linked Weixin account is stored in `~/.claude-to-im/data/weixin-accounts.json`. Running the helper again replaces the previously linked account.
   - Explain briefly: `CTI_WEIXIN_MEDIA_ENABLED` only controls inbound image/file/video downloads. For voice messages, the bridge only accepts the text returned by WeChat's built-in speech-to-text. If WeChat does not provide a transcript, the bridge replies with an error instead of downloading/transcribing raw audio.
+
+- **DingTalk**: Client ID (AppKey) → confirm → Client Secret (AppSecret) → confirm (masked) → Robot Code (optional, defaults to Client ID) → Allowed User IDs (optional) → Allowed Group IDs (optional). Guide through all 3 steps (A: create app & enable bot, B: configure Stream mode, C: publish).
 
 **Step 3 — General settings**
 

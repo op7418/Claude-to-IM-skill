@@ -12,7 +12,7 @@ Interactive wizard that configures the bridge.
 
 The wizard will prompt you for:
 
-1. **Channels to enable** -- Enter comma-separated values: `telegram`, `discord`, `feishu`, `qq`
+1. **Channels to enable** -- Enter comma-separated values: `telegram`, `discord`, `feishu`, `qq`, `dingtalk`
 2. **Platform credentials** -- Bot tokens, app IDs, and secrets for each enabled channel
 3. **Allowed users** (optional) -- Restrict which users can interact with the bot
 4. **Working directory** -- Default project directory for Claude Code sessions
