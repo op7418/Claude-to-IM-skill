@@ -8,6 +8,7 @@ export interface Config {
   defaultWorkDir: string;
   defaultModel?: string;
   defaultMode: string;
+  codexSkipGitRepoCheck?: boolean;
   // Telegram
   tgBotToken?: string;
   tgChatId?: string;
@@ -86,6 +87,7 @@ export function loadConfig(): Config {
     defaultWorkDir: env.get("CTI_DEFAULT_WORKDIR") || process.cwd(),
     defaultModel: env.get("CTI_DEFAULT_MODEL") || undefined,
     defaultMode: env.get("CTI_DEFAULT_MODE") || "code",
+    codexSkipGitRepoCheck: env.get("CTI_CODEX_SKIP_GIT_REPO_CHECK") === "true",
     tgBotToken: env.get("CTI_TG_BOT_TOKEN") || undefined,
     tgChatId: env.get("CTI_TG_CHAT_ID") || undefined,
     tgAllowedUsers: splitCsv(env.get("CTI_TG_ALLOWED_USERS")),
@@ -132,6 +134,11 @@ export function saveConfig(config: Config): void {
   out += formatEnvLine("CTI_DEFAULT_WORKDIR", config.defaultWorkDir);
   if (config.defaultModel) out += formatEnvLine("CTI_DEFAULT_MODEL", config.defaultModel);
   out += formatEnvLine("CTI_DEFAULT_MODE", config.defaultMode);
+  if (config.codexSkipGitRepoCheck !== undefined)
+    out += formatEnvLine(
+      "CTI_CODEX_SKIP_GIT_REPO_CHECK",
+      String(config.codexSkipGitRepoCheck)
+    );
   out += formatEnvLine("CTI_TG_BOT_TOKEN", config.tgBotToken);
   out += formatEnvLine("CTI_TG_CHAT_ID", config.tgChatId);
   out += formatEnvLine(

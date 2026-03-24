@@ -37,7 +37,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
 
   if (runtime === 'codex') {
     const { CodexProvider } = await import('./codex-provider.js');
-    return new CodexProvider(pendingPerms);
+    return new CodexProvider(pendingPerms, config.codexSkipGitRepoCheck);
   }
 
   if (runtime === 'auto') {
@@ -58,7 +58,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
       console.log('[claude-to-im] Auto: Claude CLI not found, falling back to Codex');
     }
     const { CodexProvider } = await import('./codex-provider.js');
-    return new CodexProvider(pendingPerms);
+    return new CodexProvider(pendingPerms, config.codexSkipGitRepoCheck);
   }
 
   // Default: claude

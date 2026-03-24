@@ -56,10 +56,6 @@ function shouldPassModelToCodex(): boolean {
 }
 
 /** Allow Codex to run outside a trusted Git repository when explicitly enabled. */
-function shouldSkipGitRepoCheck(): boolean {
-  return process.env.CTI_CODEX_SKIP_GIT_REPO_CHECK === 'true';
-}
-
 function shouldRetryFreshThread(message: string): boolean {
   const lower = message.toLowerCase();
   return (
@@ -76,7 +72,10 @@ export class CodexProvider implements LLMProvider {
   /** Maps session IDs to Codex thread IDs for resume. */
   private threadIds = new Map<string, string>();
 
-  constructor(private pendingPerms: PendingPermissions) {}
+  constructor(
+    private pendingPerms: PendingPermissions,
+    private skipGitRepoCheck = false,
+  ) {}
 
   /**
    * Lazily load the Codex SDK. Throws a clear error if not installed.
@@ -131,7 +130,7 @@ export class CodexProvider implements LLMProvider {
             const threadOptions: Record<string, unknown> = {
               ...(passModel && params.model ? { model: params.model } : {}),
               ...(params.workingDirectory ? { workingDirectory: params.workingDirectory } : {}),
-              ...(shouldSkipGitRepoCheck() ? { skipGitRepoCheck: true } : {}),
+              ...(self.skipGitRepoCheck ? { skipGitRepoCheck: true } : {}),
               approvalPolicy,
             };
 
