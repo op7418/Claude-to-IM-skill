@@ -468,6 +468,7 @@ export class SDKLLMProvider implements LLMProvider {
               abortController: params.abortController,
               permissionMode: (params.permissionMode as 'default' | 'acceptEdits' | 'plan') || undefined,
               includePartialMessages: true,
+              settingSources: ['user', 'project'],
               env: cleanEnv,
               stderr: (data: string) => {
                 stderrBuf += data;
