@@ -12,6 +12,7 @@ import { initBridgeContext } from 'claude-to-im/src/lib/bridge/context.js';
 import * as bridgeManager from 'claude-to-im/src/lib/bridge/bridge-manager.js';
 // Side-effect import to trigger adapter self-registration
 import 'claude-to-im/src/lib/bridge/adapters/index.js';
+import './adapters/weixin-adapter.js';
 
 import type { PermissionUpdate } from '@anthropic-ai/claude-agent-sdk';
 import type { LLMProvider } from 'claude-to-im/src/lib/bridge/host.js';

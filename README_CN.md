@@ -1,6 +1,6 @@
 # Claude-to-IM Skill
 
-将 Claude Code / Codex 桥接到 IM 平台 —— 在 Telegram、Discord、QQ、钉钉中与 AI 编程代理对话。
+将 Claude Code / Codex 桥接到 IM 平台 —— 在 Telegram、Discord、QQ、微信、钉钉中与 AI 编程代理对话。
 
 [English](README.md)
 
@@ -13,7 +13,7 @@
 本 Skill 运行一个后台守护进程，将你的 IM 机器人连接到 Claude Code 或 Codex 会话。来自 IM 的消息被转发给 AI 编程代理，响应（包括工具调用、权限请求、流式预览）会发回到聊天中。
 
 ```
-你 (Telegram/Discord/飞书/QQ/钉钉)
+你 (Telegram/Discord/飞书/QQ/微信/钉钉)
   ↕ Bot API
 后台守护进程 (Node.js)
   ↕ Claude Agent SDK 或 Codex SDK（通过 CTI_RUNTIME 配置）
@@ -22,13 +22,13 @@ Claude Code / Codex → 读写你的代码库
 
 ## 功能特点
 
-- **五大 IM 平台** — Telegram、Discord、飞书、QQ、钉钉，可任意组合启用
+- **六大 IM 平台** — Telegram、Discord、飞书、QQ、微信、钉钉，可任意组合启用
 - **交互式配置** — 引导式向导逐步收集 token，附带详细获取说明
-- **权限控制** — 工具调用需要在聊天中通过内联按钮（Telegram/Discord）或文本 `/perm` 命令（飞书/QQ）明确批准
+- **权限控制** — 工具调用需要在聊天中通过内联按钮（Telegram/Discord）或文本 `/perm` 命令 / 快捷 `1/2/3` 回复（飞书/QQ/微信）明确批准
 - **流式预览** — 实时查看 Claude 的输出（Telegram 和 Discord 支持）
 - **会话持久化** — 对话在守护进程重启后保留
 - **密钥保护** — token 以 `chmod 600` 存储，日志中自动脱敏
-- **无需编写代码** — 安装 Skill 后运行 `/claude-to-im setup` 即可
+- **无需编写代码** — 安装 Skill 后运行 `/claude-to-im setup`，或直接对 Codex 说 `claude-to-im setup`
 
 ## 前置要求
 
@@ -38,23 +38,37 @@ Claude Code / Codex → 读写你的代码库
 
 ## 安装
 
-### npx skills（推荐）
+请先按你实际使用的 AI Agent 产品选择对应安装方式。
+
+### Claude Code
+
+#### 推荐：`npx skills`
 
 ```bash
 npx skills add op7418/Claude-to-IM-skill
 ```
 
-### Git 克隆
+安装完成后，直接对 Claude Code 说：
+
+```text
+/claude-to-im setup
+```
+
+如果你主要想接微信，也可以直接说：
+
+```text
+帮我接微信
+```
+
+#### 备选：直接克隆到 Claude Code Skills 目录
 
 ```bash
 git clone https://github.com/op7418/Claude-to-IM-skill.git ~/.claude/skills/claude-to-im
 ```
 
-将仓库直接克隆到个人 Skills 目录，Claude Code 会自动发现。
+Claude Code 会自动发现。
 
-### 符号链接方式
-
-如果你想把仓库放在其他位置（比如方便开发）：
+#### 备选：符号链接方式（适合开发）
 
 ```bash
 git clone https://github.com/op7418/Claude-to-IM-skill.git ~/code/Claude-to-IM-skill
@@ -64,57 +78,145 @@ ln -s ~/code/Claude-to-IM-skill ~/.claude/skills/claude-to-im
 
 ### Codex
 
-如果你使用 [Codex](https://github.com/openai/codex)，直接克隆到 Codex skills 目录：
+#### 推荐：使用 Codex 安装脚本
+
+```bash
+git clone https://github.com/op7418/Claude-to-IM-skill.git ~/code/Claude-to-IM-skill
+bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh
+```
+
+如果你想保留可开发的本地仓库：
+
+```bash
+bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
+```
+
+安装脚本会把 Skill 放到 `~/.codex/skills/claude-to-im`，并自动安装依赖、构建 daemon。
+
+安装完成后，直接对 Codex 说：
+
+```text
+claude-to-im setup
+```
+
+如果你主要想接微信，也可以直接说：
+
+```text
+帮我接微信桥接
+```
+
+#### 备选：直接克隆到 Codex skills 目录
 
 ```bash
 git clone https://github.com/op7418/Claude-to-IM-skill.git ~/.codex/skills/claude-to-im
-```
-
-或使用提供的安装脚本，自动安装依赖并构建：
-
-```bash
-# 克隆并安装（复制模式）
-git clone https://github.com/op7418/Claude-to-IM-skill.git ~/code/Claude-to-IM-skill
-bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh
-
-# 或使用符号链接模式（方便开发）
-bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
+cd ~/.codex/skills/claude-to-im
+npm install
+npm run build
 ```
 
 ### 验证安装
 
-**Claude Code：** 启动新会话，输入 `/` 应能看到 `claude-to-im`。也可以问 Claude："What skills are available?"
+**Claude Code：** 启动新会话，输入 `/` 应能看到 `claude-to-im`。也可以直接问 Claude："What skills are available?"
 
-**Codex：** 启动新会话，说 "claude-to-im setup" 或 "启动桥接"，Codex 会识别 Skill 并运行配置向导。
+**Codex：** 启动新会话，说 `claude-to-im setup`、`start bridge` 或 `帮我接微信桥接`。
+
+## 更新 Skill
+
+请按你的 AI Agent 产品和安装方式选择对应的更新方式。
+
+### Claude Code
+
+如果你是通过 `npx skills` 安装的，直接重新执行：
+
+```bash
+npx skills add op7418/Claude-to-IM-skill
+```
+
+如果你是通过 `git clone` 或符号链接安装的：
+
+```bash
+cd ~/.claude/skills/claude-to-im
+git pull
+npm install
+npm run build
+```
+
+更新完成后，对 Claude Code 说：
+
+```text
+/claude-to-im doctor
+/claude-to-im start
+```
+
+### Codex
+
+如果你是用 `install-codex.sh` 的复制模式安装的：
+
+```bash
+rm -rf ~/.codex/skills/claude-to-im
+bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh
+```
+
+如果你是用 `--link` 模式，或者直接克隆到 Codex skills 目录：
+
+```bash
+cd ~/.codex/skills/claude-to-im
+git pull
+npm install
+npm run build
+```
+
+更新完成后，对 Codex 说：
+
+```text
+claude-to-im doctor
+start bridge
+```
 
 ## 快速开始
 
 ### 1. 配置
 
-```
+**Claude Code**
+
+```text
 /claude-to-im setup
+```
+
+**Codex**
+
+```text
+claude-to-im setup
 ```
 
 向导会引导你完成以下步骤：
 
-1. **选择渠道** — 选择 Telegram、Discord、飞书、QQ、钉钉，或任意组合
+1. **选择渠道** — 选择 Telegram、Discord、飞书、QQ、微信、钉钉，或任意组合
 2. **输入凭据** — 向导会详细说明如何获取每个 token、需要开启哪些设置、授予哪些权限
 3. **设置默认值** — 工作目录、模型、模式
 4. **验证** — 立即通过平台 API 验证 token 有效性
 
 ### 2. 启动
 
-```
+**Claude Code**
+
+```text
 /claude-to-im start
+```
+
+**Codex**
+
+```text
+start bridge
 ```
 
 守护进程在后台启动。关闭终端后仍会继续运行。
 
 ### 3. 开始聊天
 
-打开 IM 应用，给你的机器人发消息，Claude Code 会回复。
+打开 IM 应用，给你的机器人发消息，Claude Code / Codex 会通过桥接回复。
 
-当 Claude 需要使用工具（编辑文件、运行命令）时，聊天中会弹出带有 **允许** / **拒绝** 按钮的权限请求（Telegram/Discord），或文本 `/perm` 命令提示（飞书/QQ）。
+当 Claude 需要使用工具（编辑文件、运行命令）时，聊天中会弹出带有 **允许** / **拒绝** 按钮的权限请求（Telegram/Discord），或文本 `/perm` 命令提示 / 快捷 `1/2/3` 回复（飞书/QQ/微信）。
 
 ## 命令列表
 
@@ -176,6 +278,25 @@ bash ~/code/Claude-to-IM-skill/scripts/install-codex.sh --link
 3. 在"添加应用能力"中启用**机器人**
 4. 消息接收模式选择 **Stream 模式**（WebSocket 长连接，无需公网服务器）
 5. **发布**：进入"版本管理与发布" → 创建版本 → 发布 → 在管理后台审核通过
+
+### 微信 / Weixin
+
+> 微信当前采用扫码登录、单账号模式、文本权限确认，不支持流式预览。
+
+1. 在已安装的 Skill 目录里运行本地扫码工具：
+   - Claude Code 默认安装：`cd ~/.claude/skills/claude-to-im && npm run weixin:login`
+   - Codex 默认安装：`cd ~/.codex/skills/claude-to-im && npm run weixin:login`
+2. 工具会生成 `~/.claude-to-im/runtime/weixin-login.html`，并尽量自动用浏览器打开
+3. 用微信扫码并在手机上确认
+4. 成功后，账号会保存到 `~/.claude-to-im/data/weixin-accounts.json`
+5. 再次运行扫码工具，会替换当前已绑定的微信账号
+
+补充说明：
+
+- `CTI_WEIXIN_MEDIA_ENABLED` 只控制图片 / 文件 / 视频的入站下载
+- 语音消息只使用微信自带的语音转文字结果
+- 如果微信没有提供 `voice_item.text`，桥会直接报错，不会自行下载或转写原始语音
+- 权限确认使用文本 `/perm ...` 命令或快捷 `1/2/3` 回复
 
 ## 架构
 

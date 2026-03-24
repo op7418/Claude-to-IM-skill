@@ -55,8 +55,9 @@ function shouldPassModelToCodex(): boolean {
   return process.env.CTI_CODEX_PASS_MODEL === 'true';
 }
 
-function looksLikeClaudeModel(model?: string): boolean {
-  return !!model && /^claude[-_]/i.test(model);
+/** Allow Codex to run outside a trusted Git repository when explicitly enabled. */
+function shouldSkipGitRepoCheck(): boolean {
+  return process.env.CTI_CODEX_SKIP_GIT_REPO_CHECK === 'true';
 }
 
 function shouldRetryFreshThread(message: string): boolean {
@@ -121,17 +122,8 @@ export class CodexProvider implements LLMProvider {
             const { codex } = await self.ensureSDK();
 
             // Resolve or create thread
-            let savedThreadId = params.sdkSessionId
-              ? self.threadIds.get(params.sessionId) || params.sdkSessionId
-              : undefined;
-
-            // Cross-runtime migration safety:
-            // when a persisted Claude-model session leaks into Codex runtime,
-            // resuming it can fail immediately with model/session mismatch.
-            if (savedThreadId && looksLikeClaudeModel(params.model)) {
-              console.warn('[codex-provider] Ignoring stale Claude-like sdkSessionId in Codex runtime; starting fresh thread');
-              savedThreadId = undefined;
-            }
+            const inMemoryThreadId = self.threadIds.get(params.sessionId);
+            let savedThreadId = inMemoryThreadId || params.sdkSessionId || undefined;
 
             const approvalPolicy = toApprovalPolicy(params.permissionMode);
             const passModel = shouldPassModelToCodex();
@@ -139,6 +131,7 @@ export class CodexProvider implements LLMProvider {
             const threadOptions: Record<string, unknown> = {
               ...(passModel && params.model ? { model: params.model } : {}),
               ...(params.workingDirectory ? { workingDirectory: params.workingDirectory } : {}),
+              ...(shouldSkipGitRepoCheck() ? { skipGitRepoCheck: true } : {}),
               approvalPolicy,
             };
 

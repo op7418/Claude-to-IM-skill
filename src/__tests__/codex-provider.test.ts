@@ -245,14 +245,15 @@ describe('CodexProvider', () => {
     assert.equal(chunks.length, 0);
   });
 
-  it('does not pass model by default and skips stale Claude resume id', async () => {
+  it('does not pass model by default and still attempts resume for persisted thread ids', async () => {
     const { CodexProvider } = await import('../codex-provider.js');
     const { PendingPermissions } = await import('../permission-gateway.js');
     const provider = new CodexProvider(new PendingPermissions());
 
     let resumeCalls = 0;
     let startCalls = 0;
-    let capturedStartOptions: Record<string, unknown> | undefined;
+    let resumedThreadId: string | undefined;
+    let capturedResumeOptions: Record<string, unknown> | undefined;
 
     const mockThread = {
       runStreamed: () => ({
@@ -264,13 +265,14 @@ describe('CodexProvider', () => {
 
     (provider as any).sdk = { Codex: class { constructor() {} } };
     (provider as any).codex = {
-      resumeThread: () => {
+      resumeThread: (threadId: string, options: Record<string, unknown>) => {
         resumeCalls += 1;
+        resumedThreadId = threadId;
+        capturedResumeOptions = options;
         return mockThread;
       },
-      startThread: (opts: Record<string, unknown>) => {
+      startThread: (_opts: Record<string, unknown>) => {
         startCalls += 1;
-        capturedStartOptions = opts;
         return mockThread;
       },
     };
@@ -284,10 +286,56 @@ describe('CodexProvider', () => {
 
     await collectStream(stream);
 
-    assert.equal(resumeCalls, 0, 'Should skip resume for stale Claude-model session in Codex runtime');
-    assert.equal(startCalls, 1, 'Should start a fresh Codex thread');
-    assert.ok(capturedStartOptions, 'startThread options should be captured');
-    assert.ok(!Object.prototype.hasOwnProperty.call(capturedStartOptions!, 'model'), 'Model should not be forwarded by default');
+    assert.equal(resumeCalls, 1, 'Should attempt resume for the persisted thread id');
+    assert.equal(resumedThreadId, 'old-claude-session-id');
+    assert.equal(startCalls, 0, 'Should not eagerly start a fresh thread when resume is available');
+    assert.ok(capturedResumeOptions, 'resumeThread options should be captured');
+    assert.ok(!Object.prototype.hasOwnProperty.call(capturedResumeOptions!, 'model'), 'Model should not be forwarded by default');
+  });
+
+  it('reuses the in-memory Codex thread even when the stored model is Claude-like', async () => {
+    const { CodexProvider } = await import('../codex-provider.js');
+    const { PendingPermissions } = await import('../permission-gateway.js');
+    const provider = new CodexProvider(new PendingPermissions());
+
+    let resumeCalls = 0;
+    let startCalls = 0;
+    let resumedThreadId: string | undefined;
+
+    const mockThread = {
+      runStreamed: () => ({
+        events: (async function* () {
+          yield { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0 } };
+        })(),
+      }),
+    };
+
+    (provider as any).threadIds.set('sticky-codex-session', 'codex-thread-123');
+    (provider as any).sdk = { Codex: class { constructor() {} } };
+    (provider as any).codex = {
+      resumeThread: (threadId: string) => {
+        resumeCalls += 1;
+        resumedThreadId = threadId;
+        return mockThread;
+      },
+      startThread: () => {
+        startCalls += 1;
+        return mockThread;
+      },
+    };
+
+    const stream = provider.streamChat({
+      prompt: 'continue previous thread',
+      sessionId: 'sticky-codex-session',
+      sdkSessionId: 'old-claude-session-id',
+      model: 'claude-sonnet-4-20250514',
+    });
+
+    await collectStream(stream);
+
+    assert.equal(resumeCalls, 1, 'Should resume the in-memory Codex thread');
+    assert.equal(resumedThreadId, 'codex-thread-123');
+    assert.equal(startCalls, 0, 'Should not start a fresh thread when an in-memory Codex thread exists');
   });
 
   it('passes model only when CTI_CODEX_PASS_MODEL=true', async () => {
@@ -327,6 +375,46 @@ describe('CodexProvider', () => {
         delete process.env.CTI_CODEX_PASS_MODEL;
       } else {
         process.env.CTI_CODEX_PASS_MODEL = old;
+      }
+    }
+  });
+
+  it('passes skipGitRepoCheck only when CTI_CODEX_SKIP_GIT_REPO_CHECK=true', async () => {
+    const old = process.env.CTI_CODEX_SKIP_GIT_REPO_CHECK;
+    process.env.CTI_CODEX_SKIP_GIT_REPO_CHECK = 'true';
+    try {
+      const { CodexProvider } = await import('../codex-provider.js');
+      const { PendingPermissions } = await import('../permission-gateway.js');
+      const provider = new CodexProvider(new PendingPermissions());
+
+      let capturedStartOptions: Record<string, unknown> | undefined;
+      const mockThread = {
+        runStreamed: () => ({
+          events: (async function* () {
+            yield { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0 } };
+          })(),
+        }),
+      };
+      (provider as any).sdk = { Codex: class { constructor() {} } };
+      (provider as any).codex = {
+        startThread: (opts: Record<string, unknown>) => {
+          capturedStartOptions = opts;
+          return mockThread;
+        },
+      };
+
+      const stream = provider.streamChat({
+        prompt: 'hello',
+        sessionId: 'skip-git-check-session',
+      });
+      await collectStream(stream);
+
+      assert.equal(capturedStartOptions?.skipGitRepoCheck, true);
+    } finally {
+      if (old === undefined) {
+        delete process.env.CTI_CODEX_SKIP_GIT_REPO_CHECK;
+      } else {
+        process.env.CTI_CODEX_SKIP_GIT_REPO_CHECK = old;
       }
     }
   });

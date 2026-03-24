@@ -392,6 +392,33 @@ if [ -f "$CONFIG_FILE" ]; then
       check "DingTalk app credentials configured" 1
     fi
   fi
+
+  # --- Weixin ---
+  if echo "$CTI_CHANNELS" | grep -q weixin; then
+    WX_ACCOUNTS_FILE="$CTI_HOME/data/weixin-accounts.json"
+    if [ -f "$WX_ACCOUNTS_FILE" ]; then
+      WX_COUNTS=$(node -e '
+        const fs = require("fs");
+        const file = process.argv[1];
+        const accounts = JSON.parse(fs.readFileSync(file, "utf8"));
+        const enabled = accounts.filter((a) => a && a.enabled && a.token).length;
+        process.stdout.write(`${enabled}:${accounts.length}`);
+      ' "$WX_ACCOUNTS_FILE" 2>/dev/null || echo "0:0")
+      WX_ENABLED="${WX_COUNTS%%:*}"
+      WX_TOTAL="${WX_COUNTS##*:}"
+      if [ "${WX_ENABLED:-0}" -ge 1 ] 2>/dev/null; then
+        if [ "${WX_TOTAL:-0}" -gt 1 ] 2>/dev/null; then
+          check "Weixin linked account store (single-account mode; ${WX_TOTAL} records on disk, newest enabled record will be used)" 0
+        else
+          check "Weixin linked account store (single linked account ready)" 0
+        fi
+      else
+        check "Weixin linked account store (found file, but no enabled linked account with token — run 'cd $SKILL_DIR && npm run weixin:login')" 1
+      fi
+    else
+      check "Weixin linked account store (missing — run 'cd $SKILL_DIR && npm run weixin:login')" 1
+    fi
+  fi
 fi
 
 # --- Log directory writable ---
@@ -435,6 +462,7 @@ if [ "$FAIL" -gt 0 ]; then
   echo "  SDK cli.js missing    → cd $SKILL_DIR && npm install"
   echo "  dist/daemon.mjs stale → cd $SKILL_DIR && npm run build"
   echo "  config.env missing    → run setup wizard"
+  echo "  Weixin linked account missing→ cd $SKILL_DIR && npm run weixin:login"
   echo "  Stale PID file        → run stop, then start"
 fi
 

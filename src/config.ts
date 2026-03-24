@@ -34,6 +34,10 @@ export interface Config {
   dingtalkRobotCode?: string;
   dingtalkAllowedUsers?: string[];
   dingtalkAllowedGroups?: string[];
+  // WeChat
+  weixinBaseUrl?: string;
+  weixinCdnBaseUrl?: string;
+  weixinMediaEnabled?: boolean;
   // Auto-approve all tool permission requests without user confirmation
   autoApprove?: boolean;
 }
@@ -115,6 +119,11 @@ export function loadConfig(): Config {
     dingtalkRobotCode: env.get("CTI_DINGTALK_ROBOT_CODE") || undefined,
     dingtalkAllowedUsers: splitCsv(env.get("CTI_DINGTALK_ALLOWED_USERS")),
     dingtalkAllowedGroups: splitCsv(env.get("CTI_DINGTALK_ALLOWED_GROUPS")),
+    weixinBaseUrl: env.get("CTI_WEIXIN_BASE_URL") || undefined,
+    weixinCdnBaseUrl: env.get("CTI_WEIXIN_CDN_BASE_URL") || undefined,
+    weixinMediaEnabled: env.has("CTI_WEIXIN_MEDIA_ENABLED")
+      ? env.get("CTI_WEIXIN_MEDIA_ENABLED") === "true"
+      : undefined,
     autoApprove: env.get("CTI_AUTO_APPROVE") === "true",
   };
 }
@@ -182,6 +191,11 @@ export function saveConfig(config: Config): void {
     "CTI_DINGTALK_ALLOWED_GROUPS",
     config.dingtalkAllowedGroups?.join(",")
   );
+
+  out += formatEnvLine("CTI_WEIXIN_BASE_URL", config.weixinBaseUrl);
+  out += formatEnvLine("CTI_WEIXIN_CDN_BASE_URL", config.weixinCdnBaseUrl);
+  if (config.weixinMediaEnabled !== undefined)
+    out += formatEnvLine("CTI_WEIXIN_MEDIA_ENABLED", String(config.weixinMediaEnabled));
 
   fs.mkdirSync(CTI_HOME, { recursive: true });
   const tmpPath = CONFIG_PATH + ".tmp";
@@ -289,6 +303,20 @@ export function configToSettings(config: Config): Map<string, string> {
   );
   if (config.dingtalkAllowedGroups)
     m.set("bridge_dingtalk_group_allow_from", config.dingtalkAllowedGroups.join(","));
+  
+  // ── WeChat ──
+  // Upstream keys: bridge_weixin_enabled, bridge_weixin_media_enabled,
+  //   bridge_weixin_base_url, bridge_weixin_cdn_base_url
+  m.set(
+    "bridge_weixin_enabled",
+    config.enabledChannels.includes("weixin") ? "true" : "false"
+  );
+  if (config.weixinMediaEnabled !== undefined)
+    m.set("bridge_weixin_media_enabled", String(config.weixinMediaEnabled));
+  if (config.weixinBaseUrl)
+    m.set("bridge_weixin_base_url", config.weixinBaseUrl);
+  if (config.weixinCdnBaseUrl)
+    m.set("bridge_weixin_cdn_base_url", config.weixinCdnBaseUrl);
 
   // ── Defaults ──
   // Upstream keys: bridge_default_work_dir, bridge_default_model, default_model

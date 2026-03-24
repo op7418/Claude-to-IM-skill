@@ -127,6 +127,20 @@ describe('configToSettings', () => {
     assert.equal(m.get('bridge_qq_max_image_size'), '10');
   });
 
+  it('maps weixin settings', () => {
+    const m = configToSettings({
+      ...base,
+      enabledChannels: ['weixin'],
+      weixinBaseUrl: 'https://example.weixin.test',
+      weixinCdnBaseUrl: 'https://cdn.weixin.test',
+      weixinMediaEnabled: true,
+    });
+    assert.equal(m.get('bridge_weixin_enabled'), 'true');
+    assert.equal(m.get('bridge_weixin_base_url'), 'https://example.weixin.test');
+    assert.equal(m.get('bridge_weixin_cdn_base_url'), 'https://cdn.weixin.test');
+    assert.equal(m.get('bridge_weixin_media_enabled'), 'true');
+  });
+
   it('omits qq image settings when not set', () => {
     const m = configToSettings({
       ...base,
@@ -228,5 +242,6 @@ describe('loadConfig/saveConfig round-trip', () => {
     assert.equal(m.get('bridge_dingtalk_enabled'), 'false');
     assert.equal(m.get('bridge_dingtalk_group_policy'), 'open');
     assert.equal(m.has('bridge_dingtalk_group_allow_from'), false);
+    assert.equal(m.get('bridge_weixin_enabled'), 'false');
   });
 });
