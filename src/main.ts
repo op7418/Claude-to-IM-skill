@@ -124,6 +124,15 @@ async function main(): Promise<void> {
 
   const settings = configToSettings(config);
   const store = new JsonFileStore(settings);
+
+  // Clean up stale permission links from previous runs — their in-memory
+  // Promises no longer exist, so they can never be resolved and would block
+  // numeric shortcuts with "Multiple pending permissions" errors.
+  const staleCount = store.resolveAllPendingPermissions();
+  if (staleCount > 0) {
+    console.log(`[claude-to-im] Cleaned up ${staleCount} stale pending permission(s) from previous run`);
+  }
+
   const pendingPerms = new PendingPermissions();
   const llm = await resolveProvider(config, pendingPerms);
   console.log(`[claude-to-im] Runtime: ${config.runtime}`);
