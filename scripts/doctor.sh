@@ -4,6 +4,7 @@ CTI_HOME="$HOME/.claude-to-im"
 CONFIG_FILE="$CTI_HOME/config.env"
 PID_FILE="$CTI_HOME/runtime/bridge.pid"
 LOG_FILE="$CTI_HOME/logs/bridge.log"
+WORKSPACES_FILE="$CTI_HOME/workspaces.json"
 
 PASS=0
 FAIL=0
@@ -248,8 +249,8 @@ if [ "$CTI_RUNTIME" = "codex" ] || [ "$CTI_RUNTIME" = "auto" ]; then
   if [ -n "${CTI_CODEX_API_KEY:-}" ] || [ -n "${CODEX_API_KEY:-}" ] || [ -n "${OPENAI_API_KEY:-}" ]; then
     CODEX_AUTH=0
   elif command -v codex &>/dev/null; then
-    CODEX_AUTH_OUT=$(codex auth status 2>&1 || true)
-    if echo "$CODEX_AUTH_OUT" | grep -qiE 'logged.in|authenticated'; then
+    CODEX_AUTH_OUT=$(codex login status 2>&1 || codex auth status 2>&1 || true)
+    if echo "$CODEX_AUTH_OUT" | grep -qiE 'logged.in|authenticated|logged in'; then
       CODEX_AUTH=0
     fi
   fi
@@ -292,6 +293,63 @@ if [ -f "$CONFIG_FILE" ]; then
   else
     check "config.env permissions are 600 (currently $PERMS)" 1
   fi
+fi
+
+# --- workspace whitelist config ---
+if [ -f "$WORKSPACES_FILE" ]; then
+  if node - "$WORKSPACES_FILE" <<'NODE'
+const fs = require('node:fs');
+const path = require('node:path');
+const filePath = process.argv[2];
+const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+  throw new Error('must be a JSON object');
+}
+if (typeof raw.defaultAlias !== 'string' || raw.defaultAlias.trim() === '') {
+  throw new Error('defaultAlias is required');
+}
+if (!Array.isArray(raw.workspaces) || raw.workspaces.length === 0) {
+  throw new Error('workspaces must be a non-empty array');
+}
+const seen = new Set();
+let hasDefault = false;
+for (const workspace of raw.workspaces) {
+  if (!workspace || typeof workspace !== 'object') {
+    throw new Error('workspace entries must be objects');
+  }
+  const alias = typeof workspace.alias === 'string' ? workspace.alias.trim() : '';
+  const workspacePath = typeof workspace.path === 'string' ? workspace.path.trim() : '';
+  if (!alias) {
+    throw new Error('workspace alias cannot be empty');
+  }
+  if (!workspacePath) {
+    throw new Error(`workspace path cannot be empty for alias ${alias}`);
+  }
+  if (!path.isAbsolute(workspacePath)) {
+    throw new Error(`workspace path must be absolute for alias ${alias}`);
+  }
+  if (!fs.existsSync(workspacePath) || !fs.statSync(workspacePath).isDirectory()) {
+    throw new Error(`workspace path is invalid for alias ${alias}`);
+  }
+  if (seen.has(alias)) {
+    throw new Error(`duplicate alias ${alias}`);
+  }
+  if (alias === raw.defaultAlias) {
+    hasDefault = true;
+  }
+  seen.add(alias);
+}
+if (!hasDefault) {
+  throw new Error(`defaultAlias ${raw.defaultAlias} not found in workspaces`);
+}
+NODE
+  then
+    check "Workspace whitelist config valid ($WORKSPACES_FILE)" 0
+  else
+    check "Workspace whitelist config valid ($WORKSPACES_FILE)" 1
+  fi
+else
+  check "Workspace whitelist config (not set — using CTI_DEFAULT_WORKDIR only)" 0
 fi
 
 # --- Load config for channel checks ---

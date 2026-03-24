@@ -120,6 +120,24 @@ Ask for runtime, default working directory, model, and mode:
   - `codex` — uses OpenAI Codex SDK (requires `codex` CLI; auth via `codex auth login` or `OPENAI_API_KEY`)
   - `auto` — tries Claude first, falls back to Codex if Claude CLI not found
 - **Working Directory**: default `$CWD`
+- **Workspace whitelist** (optional, recommended for Weixin multi-project use):
+  - `CTI_DEFAULT_WORKDIR` remains the global fallback working directory
+  - If the user wants to switch between multiple projects from WeChat, create `~/.claude-to-im/workspaces.json`
+  - Format:
+    ```json
+    {
+      "defaultAlias": "zero",
+      "workspaces": [
+        { "alias": "zero", "path": "/absolute/path/to/project-zero" },
+        { "alias": "foo", "path": "/absolute/path/to/project-foo" }
+      ]
+    }
+    ```
+  - WeChat control commands:
+    - `项目列表`
+    - `当前项目`
+    - `切换项目 <alias>`
+  - Only whitelist aliases are allowed; arbitrary path switching is intentionally blocked
 - **Model** (optional): Leave blank to inherit the runtime's own default model. If the user wants to override, ask them to enter a model name. Do NOT hardcode or suggest specific model names — the available models change over time.
 - **Mode**: `code` (default), `plan`, `ask`
 
@@ -177,8 +195,10 @@ Show results and suggest fixes for any failures. Common fixes:
 - SDK cli.js missing → `cd SKILL_DIR && npm install`
 - dist/daemon.mjs stale → `cd SKILL_DIR && npm run build`
 - Config missing → run `setup`
+- Workspace whitelist invalid → fix `~/.claude-to-im/workspaces.json` (duplicate alias, missing default alias, non-existent path, or non-absolute path)
 - Weixin account missing / expired → `cd SKILL_DIR && npm run weixin:login`
 - Weixin voice message reports missing speech-to-text → enable WeChat's own voice transcription and resend; the bridge does not transcribe raw voice audio itself
+- Codex bridge hangs after `thread.started` or logs interactive MCP auth errors (for example Figma) → keep the default isolated bridge `CODEX_HOME`; do not set `CTI_CODEX_USE_SHARED_HOME=true` unless you explicitly want the bridge to inherit your main `~/.codex/config.toml`
 
 For more complex issues (messages not received, permission timeouts, high memory, stale PID files), read `SKILL_DIR/references/troubleshooting.md` for detailed diagnosis steps.
 

@@ -117,9 +117,16 @@ export function loadConfig(): Config {
   };
 }
 
+export function quoteEnvValue(value: string): string {
+  if (/^[A-Za-z0-9_./:@,+-]+$/.test(value)) {
+    return value;
+  }
+  return JSON.stringify(value);
+}
+
 function formatEnvLine(key: string, value: string | undefined): string {
   if (value === undefined || value === "") return "";
-  return `${key}=${value}\n`;
+  return `${key}=${quoteEnvValue(value)}\n`;
 }
 
 export function saveConfig(config: Config): void {

@@ -15,6 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { LLMProvider, StreamChatParams } from 'claude-to-im/src/lib/bridge/host.js';
+import { CTI_HOME } from './config.js';
 import type { PendingPermissions } from './permission-gateway.js';
 import { sseEvent } from './sse-utils.js';
 
@@ -27,6 +28,37 @@ const MIME_EXT: Record<string, string> = {
   'image/webp': '.webp',
 };
 
+const DEFAULT_CODEX_STREAM_IDLE_TIMEOUT_MS = 45_000;
+const SHARED_CODEX_HOME_NAME = '.codex';
+const BRIDGE_CODEX_HOME_NAME = 'codex-home';
+const FORWARDED_CODEX_ENV_KEYS = [
+  'HOME',
+  'PATH',
+  'SHELL',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TMPDIR',
+  'USER',
+  'LOGNAME',
+  'TERM',
+  'TERMINFO',
+  'TERM_PROGRAM',
+  'TERM_PROGRAM_VERSION',
+  'COLORTERM',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'all_proxy',
+  'no_proxy',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+  'NODE_EXTRA_CA_CERTS',
+] as const;
+
 // All SDK types kept as `any` because @openai/codex-sdk is optional.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CodexModule = any;
@@ -34,6 +66,13 @@ type CodexModule = any;
 type CodexInstance = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ThreadInstance = any;
+
+class CodexStreamAbortedError extends Error {
+  constructor() {
+    super('Codex stream aborted');
+    this.name = 'CodexStreamAbortedError';
+  }
+}
 
 /**
  * Map bridge permission modes to Codex approval policies.
@@ -58,6 +97,93 @@ function shouldPassModelToCodex(): boolean {
 /** Allow Codex to run outside a trusted Git repository when explicitly enabled. */
 function shouldSkipGitRepoCheck(): boolean {
   return process.env.CTI_CODEX_SKIP_GIT_REPO_CHECK === 'true';
+}
+
+function shouldUseSharedCodexHome(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.CTI_CODEX_USE_SHARED_HOME === 'true';
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.floor(parsed);
+}
+
+export function getCodexStreamIdleTimeoutMs(env: NodeJS.ProcessEnv = process.env): number {
+  return parsePositiveInt(env.CTI_CODEX_STREAM_IDLE_TIMEOUT_MS, DEFAULT_CODEX_STREAM_IDLE_TIMEOUT_MS);
+}
+
+function ensureDirectory(dirPath: string, mode: number): void {
+  fs.mkdirSync(dirPath, { recursive: true, mode });
+  try {
+    fs.chmodSync(dirPath, mode);
+  } catch {
+    // Ignore chmod failures on filesystems that do not support it
+  }
+}
+
+function syncFileIfPresent(sourcePath: string, targetPath: string, mode: number): void {
+  if (!fs.existsSync(sourcePath)) {
+    return;
+  }
+  fs.copyFileSync(sourcePath, targetPath);
+  try {
+    fs.chmodSync(targetPath, mode);
+  } catch {
+    // Ignore chmod failures on filesystems that do not support it
+  }
+}
+
+export function prepareBridgeCodexHome(
+  env: NodeJS.ProcessEnv = process.env,
+  options: { ctiHome?: string } = {},
+): string {
+  const userHome = env.HOME || os.homedir();
+  const ctiHome = options.ctiHome || CTI_HOME;
+  const bridgeCodexHome = path.join(ctiHome, BRIDGE_CODEX_HOME_NAME);
+  const sharedCodexHome = path.join(userHome, SHARED_CODEX_HOME_NAME);
+
+  ensureDirectory(bridgeCodexHome, 0o700);
+  syncFileIfPresent(
+    path.join(sharedCodexHome, 'auth.json'),
+    path.join(bridgeCodexHome, 'auth.json'),
+    0o600,
+  );
+
+  return bridgeCodexHome;
+}
+
+export function buildCodexCliEnv(
+  baseEnv: NodeJS.ProcessEnv = process.env,
+  options: { ctiHome?: string } = {},
+): Record<string, string> {
+  const env: Record<string, string> = {};
+
+  for (const key of FORWARDED_CODEX_ENV_KEYS) {
+    const value = baseEnv[key];
+    if (value) {
+      env[key] = value;
+    }
+  }
+
+  if (!env.HOME) {
+    env.HOME = baseEnv.HOME || os.homedir();
+  }
+
+  if (shouldUseSharedCodexHome(baseEnv)) {
+    if (baseEnv.CODEX_HOME) {
+      env.CODEX_HOME = baseEnv.CODEX_HOME;
+    }
+    return env;
+  }
+
+  env.CODEX_HOME = prepareBridgeCodexHome({ ...baseEnv, HOME: env.HOME }, options);
+  return env;
 }
 
 function shouldRetryFreshThread(message: string): boolean {
@@ -101,14 +227,66 @@ export class CodexProvider implements LLMProvider {
       || process.env.OPENAI_API_KEY
       || undefined;
     const baseUrl = process.env.CTI_CODEX_BASE_URL || undefined;
+    const cliEnv = buildCodexCliEnv();
 
     const CodexClass = this.sdk.Codex;
     this.codex = new CodexClass({
       ...(apiKey ? { apiKey } : {}),
       ...(baseUrl ? { baseUrl } : {}),
+      env: cliEnv,
     });
 
+    if (cliEnv.CODEX_HOME) {
+      console.log(`[codex-provider] Using isolated Codex home: ${cliEnv.CODEX_HOME}`);
+    }
+
     return { sdk: this.sdk, codex: this.codex };
+  }
+
+  private async readNextEvent(
+    iterator: AsyncIterator<Record<string, unknown>>,
+    timeoutMs: number,
+    signal?: AbortSignal,
+    context?: string,
+  ): Promise<IteratorResult<Record<string, unknown>>> {
+    let timeoutId: NodeJS.Timeout | undefined;
+    let abortHandler: (() => void) | undefined;
+
+    const nextPromise = iterator.next();
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        const message = context
+          ? `Codex stream stalled after ${context} for ${timeoutMs}ms`
+          : `Codex stream stalled for ${timeoutMs}ms`;
+        reject(new Error(message));
+      }, timeoutMs);
+    });
+
+    const abortPromise = signal
+      ? new Promise<never>((_, reject) => {
+        if (signal.aborted) {
+          reject(new CodexStreamAbortedError());
+          return;
+        }
+        abortHandler = () => reject(new CodexStreamAbortedError());
+        signal.addEventListener('abort', abortHandler, { once: true });
+      })
+      : undefined;
+
+    try {
+      const waiters: Array<Promise<IteratorResult<Record<string, unknown>> | never>> = [nextPromise, timeoutPromise];
+      if (abortPromise) {
+        waiters.push(abortPromise);
+      }
+      return await Promise.race(waiters);
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      if (signal && abortHandler) {
+        signal.removeEventListener('abort', abortHandler);
+      }
+    }
   }
 
   streamChat(params: StreamChatParams): ReadableStream<string> {
@@ -174,14 +352,42 @@ export class CodexProvider implements LLMProvider {
               }
 
               let sawAnyEvent = false;
+              let lastEventType = 'turn start';
               try {
                 const { events } = await thread.runStreamed(input);
+                const iterator = events[Symbol.asyncIterator]();
 
-                for await (const event of events) {
-                  sawAnyEvent = true;
-                  if (params.abortController?.signal.aborted) {
+                while (true) {
+                  let nextEvent: IteratorResult<Record<string, unknown>>;
+                  try {
+                    nextEvent = await self.readNextEvent(
+                      iterator,
+                      getCodexStreamIdleTimeoutMs(),
+                      params.abortController?.signal,
+                      sawAnyEvent ? lastEventType : 'turn start',
+                    );
+                  } catch (err) {
+                    if (err instanceof CodexStreamAbortedError) {
+                      break;
+                    }
+                    const iteratorReturn = iterator.return;
+                    if (iteratorReturn) {
+                      try {
+                        void iteratorReturn.call(iterator);
+                      } catch {
+                        // Ignore iterator teardown failures
+                      }
+                    }
+                    throw err;
+                  }
+
+                  if (nextEvent.done) {
                     break;
                   }
+
+                  const event = nextEvent.value;
+                  sawAnyEvent = true;
+                  lastEventType = String(event.type || 'unknown event');
 
                   switch (event.type) {
                     case 'thread.started': {

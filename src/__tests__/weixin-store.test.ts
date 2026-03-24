@@ -6,9 +6,11 @@ import { CTI_HOME } from '../config.js';
 import {
   deleteWeixinAccount,
   getWeixinAccount,
+  getWeixinActiveWorkspaceAlias,
   getWeixinContextToken,
   listWeixinAccounts,
   setWeixinAccountEnabled,
+  setWeixinActiveWorkspaceAlias,
   upsertWeixinAccount,
   upsertWeixinContextToken,
 } from '../weixin-store.js';
@@ -16,12 +18,14 @@ import {
 const DATA_DIR = path.join(CTI_HOME, 'data');
 const ACCOUNTS_PATH = path.join(DATA_DIR, 'weixin-accounts.json');
 const TOKENS_PATH = path.join(DATA_DIR, 'weixin-context-tokens.json');
+const ACTIVE_WORKSPACES_PATH = path.join(DATA_DIR, 'weixin-active-workspaces.json');
 
 describe('weixin-store', () => {
   beforeEach(() => {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.rmSync(ACCOUNTS_PATH, { force: true });
     fs.rmSync(TOKENS_PATH, { force: true });
+    fs.rmSync(ACTIVE_WORKSPACES_PATH, { force: true });
   });
 
   it('upserts and lists accounts', () => {
@@ -147,5 +151,14 @@ describe('weixin-store', () => {
       'wx-bot-old::peer-a': 'ctx-old',
       'wx-bot-new::peer-b': 'ctx-new',
     });
+  });
+
+  it('stores active workspace alias per peer', () => {
+    setWeixinActiveWorkspaceAlias('wx-bot-1', 'peer-a', 'zero');
+    setWeixinActiveWorkspaceAlias('wx-bot-1', 'peer-b', 'foo');
+
+    assert.equal(getWeixinActiveWorkspaceAlias('wx-bot-1', 'peer-a'), 'zero');
+    assert.equal(getWeixinActiveWorkspaceAlias('wx-bot-1', 'peer-b'), 'foo');
+    assert.equal(getWeixinActiveWorkspaceAlias('wx-bot-1', 'peer-c'), undefined);
   });
 });

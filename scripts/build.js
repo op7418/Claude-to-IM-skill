@@ -1,12 +1,10 @@
 import * as esbuild from 'esbuild';
 
-await esbuild.build({
-  entryPoints: ['src/main.ts'],
+const sharedOptions = {
   bundle: true,
   platform: 'node',
   format: 'esm',
   target: 'node20',
-  outfile: 'dist/daemon.mjs',
   external: [
     // SDK must stay external — it spawns a CLI subprocess and resolves
     // dist/cli.js relative to its own package location. Bundling it
@@ -21,6 +19,19 @@ await esbuild.build({
     'node:*',
   ],
   banner: { js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);" },
+};
+
+await esbuild.build({
+  ...sharedOptions,
+  entryPoints: ['src/main.ts'],
+  outfile: 'dist/daemon.mjs',
+});
+
+await esbuild.build({
+  ...sharedOptions,
+  entryPoints: ['src/weixin-login.ts'],
+  outfile: 'dist/weixin-login.mjs',
 });
 
 console.log('Built dist/daemon.mjs');
+console.log('Built dist/weixin-login.mjs');

@@ -1,5 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import os from 'node:os';
+import path from 'node:path';
 
 // ── SSE utils tests ─────────────────────────────────────────
 
@@ -467,6 +469,89 @@ describe('CodexProvider', () => {
     assert.equal(startCalls, 1, 'Should fall back to a fresh thread');
     assert.ok(!errorEvent, 'Retry success should not emit error');
     assert.ok(resultEvent, 'Retry success should emit result');
+  });
+
+  it('fails fast when Codex stops emitting events after thread.started', async () => {
+    const old = process.env.CTI_CODEX_STREAM_IDLE_TIMEOUT_MS;
+    process.env.CTI_CODEX_STREAM_IDLE_TIMEOUT_MS = '50';
+
+    try {
+      const { CodexProvider } = await import('../codex-provider.js');
+      const { PendingPermissions } = await import('../permission-gateway.js');
+      const provider = new CodexProvider(new PendingPermissions());
+
+      const stalledThread = {
+        runStreamed: () => ({
+          events: (async function* () {
+            yield { type: 'thread.started', thread_id: 'stalled-thread-1' };
+            await new Promise(() => {});
+          })(),
+        }),
+      };
+
+      (provider as any).sdk = { Codex: class { constructor() {} } };
+      (provider as any).codex = {
+        startThread: () => stalledThread,
+      };
+
+      const stream = provider.streamChat({
+        prompt: 'hello',
+        sessionId: 'stalled-session',
+      });
+
+      const result = await Promise.race([
+        collectStream(stream).then((chunks) => ({ kind: 'chunks' as const, chunks })),
+        new Promise<{ kind: 'timeout' }>((resolve) => setTimeout(() => resolve({ kind: 'timeout' }), 250)),
+      ]);
+
+      assert.notEqual(result.kind, 'timeout', 'stream should fail fast instead of hanging forever');
+      if (result.kind !== 'chunks') {
+        return;
+      }
+
+      const events = parseSSEChunks(result.chunks);
+      const errorEvent = events.find(e => e.type === 'error');
+      assert.ok(errorEvent, 'Should emit an error event after the stream stalls');
+      assert.match(errorEvent.data, /stalled|timed out/i);
+    } finally {
+      if (old === undefined) {
+        delete process.env.CTI_CODEX_STREAM_IDLE_TIMEOUT_MS;
+      } else {
+        process.env.CTI_CODEX_STREAM_IDLE_TIMEOUT_MS = old;
+      }
+    }
+  });
+});
+
+describe('buildCodexCliEnv', () => {
+  it('isolates the bridge from the user Codex home and syncs login auth by default', async () => {
+    const tmpUserHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cti-user-home-'));
+    const tmpCtiHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cti-home-'));
+    const sharedCodexHome = path.join(tmpUserHome, '.codex');
+    fs.mkdirSync(sharedCodexHome, { recursive: true });
+    fs.writeFileSync(path.join(sharedCodexHome, 'auth.json'), '{"token":"shared-auth"}', 'utf-8');
+
+    try {
+      const { buildCodexCliEnv } = await import('../codex-provider.js');
+      const env = buildCodexCliEnv({
+        HOME: tmpUserHome,
+        PATH: '/usr/bin:/bin',
+        SHELL: '/bin/zsh',
+        LANG: 'en_US.UTF-8',
+        TMPDIR: '/tmp',
+        CODEX_THREAD_ID: 'should-not-leak',
+      }, { ctiHome: tmpCtiHome });
+
+      assert.equal(env.CODEX_THREAD_ID, undefined);
+      assert.equal(env.CODEX_HOME, path.join(tmpCtiHome, 'codex-home'));
+      assert.equal(
+        fs.readFileSync(path.join(tmpCtiHome, 'codex-home', 'auth.json'), 'utf-8'),
+        '{"token":"shared-auth"}',
+      );
+    } finally {
+      fs.rmSync(tmpUserHome, { recursive: true, force: true });
+      fs.rmSync(tmpCtiHome, { recursive: true, force: true });
+    }
   });
 });
 

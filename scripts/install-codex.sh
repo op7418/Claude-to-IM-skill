@@ -50,7 +50,7 @@ if [ ! -d "$TARGET_DIR/node_modules" ] || [ ! -d "$TARGET_DIR/node_modules/@open
 fi
 
 # Ensure build
-if [ ! -f "$TARGET_DIR/dist/daemon.mjs" ]; then
+if [ ! -f "$TARGET_DIR/dist/daemon.mjs" ] || [ ! -f "$TARGET_DIR/dist/weixin-login.mjs" ]; then
   echo "Building daemon bundle..."
   (cd "$TARGET_DIR" && npm run build)
 fi

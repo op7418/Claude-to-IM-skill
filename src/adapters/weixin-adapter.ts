@@ -9,8 +9,10 @@ import { BaseChannelAdapter, registerAdapterFactory } from 'claude-to-im/src/lib
 import { getBridgeContext } from 'claude-to-im/src/lib/bridge/context.js';
 import {
   getWeixinAccount,
+  getWeixinActiveWorkspaceAlias,
   getWeixinContextToken,
   listWeixinAccounts,
+  setWeixinActiveWorkspaceAlias,
   upsertWeixinContextToken,
 } from '../weixin-store.js';
 import { getConfig, getUpdates, sendTextMessage, sendTyping } from './weixin/weixin-api.js';
@@ -29,6 +31,14 @@ import {
   MessageItemType,
   TypingStatus,
 } from './weixin/weixin-types.js';
+import { parseWeixinCommand } from '../weixin-command-router.js';
+import {
+  getDefaultWorkspace,
+  getWorkspaceByAlias,
+  loadWorkspaceConfig,
+  type WorkspaceConfig,
+  type WorkspaceEntry,
+} from '../workspace-config.js';
 
 const DEDUP_MAX = 500;
 const BACKOFF_BASE_MS = 2_000;
@@ -339,7 +349,16 @@ export class WeixinAdapter extends BaseChannelAdapter {
       text = text.trim() ? `${text}\n${failureNote}` : (attachments.length > 0 ? failureNote : text);
     }
 
-    const chatId = encodeWeixinChatId(accountId, message.from_user_id);
+    const trimmedText = text.trim();
+    if (attachments.length === 0 && trimmedText) {
+      const handled = await this.handleWorkspaceCommand(accountId, message.from_user_id, trimmedText);
+      if (handled) {
+        return;
+      }
+    }
+
+    const workspace = this.resolveWorkspaceSelection(accountId, message.from_user_id);
+    const chatId = encodeWeixinChatId(accountId, message.from_user_id, workspace?.alias);
     const inbound: InboundMessage = {
       messageId: message.message_id || `weixin_${accountId}_${message.seq || Date.now()}`,
       address: {
@@ -417,6 +436,152 @@ export class WeixinAdapter extends BaseChannelAdapter {
     }
 
     await sendTyping(creds, peerUserId, typingTicket, status);
+  }
+
+  protected async sendDirectTextReply(accountId: string, peerUserId: string, text: string): Promise<void> {
+    const account = getWeixinAccount(accountId);
+    if (!account) {
+      return;
+    }
+
+    const contextToken = getWeixinContextToken(accountId, peerUserId);
+    if (!contextToken) {
+      return;
+    }
+
+    await sendTextMessage(
+      this.accountToCreds(account),
+      peerUserId,
+      text,
+      contextToken,
+    );
+  }
+
+  private resolveWorkspaceSelection(accountId: string, peerUserId: string): WorkspaceEntry | undefined {
+    const config = this.loadWorkspaceConfigSafe();
+    if (!config) {
+      return undefined;
+    }
+
+    const activeAlias = getWeixinActiveWorkspaceAlias(accountId, peerUserId) || config.defaultAlias;
+    const workspace = getWorkspaceByAlias(config, activeAlias) || getDefaultWorkspace(config);
+    if (workspace.alias !== activeAlias) {
+      setWeixinActiveWorkspaceAlias(accountId, peerUserId, workspace.alias);
+    } else if (!getWeixinActiveWorkspaceAlias(accountId, peerUserId)) {
+      setWeixinActiveWorkspaceAlias(accountId, peerUserId, workspace.alias);
+    }
+    return workspace;
+  }
+
+  private loadWorkspaceConfigSafe(): WorkspaceConfig | null {
+    try {
+      return loadWorkspaceConfig();
+    } catch (err) {
+      console.warn(
+        '[weixin-adapter] Invalid workspace config:',
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    }
+  }
+
+  private async handleWorkspaceCommand(accountId: string, peerUserId: string, text: string): Promise<boolean> {
+    const command = parseWeixinCommand(text);
+    if (!command) {
+      return false;
+    }
+
+    const defaultWorkDir = getBridgeContext().store.getSetting('bridge_default_work_dir') || process.cwd();
+    let config: WorkspaceConfig | null = null;
+    try {
+      config = loadWorkspaceConfig();
+    } catch (err) {
+      await this.sendDirectTextReply(
+        accountId,
+        peerUserId,
+        `工作区配置有误：${err instanceof Error ? err.message : String(err)}`,
+      );
+      return true;
+    }
+
+    if (!config) {
+      const fallbackMessage = command.type === 'switch'
+        ? '尚未配置工作区白名单，暂不支持切换项目。请创建 ~/.claude-to-im/workspaces.json。'
+        : [
+            '当前未配置工作区白名单。',
+            `默认工作目录：${defaultWorkDir}`,
+            '如需多项目切换，请创建 ~/.claude-to-im/workspaces.json。',
+          ].join('\n');
+      await this.sendDirectTextReply(accountId, peerUserId, fallbackMessage);
+      return true;
+    }
+
+    const currentWorkspace = this.resolveWorkspaceSelection(accountId, peerUserId) || getDefaultWorkspace(config);
+    switch (command.type) {
+      case 'list': {
+        const lines = config.workspaces.map((workspace) => {
+          const tags: string[] = [];
+          if (workspace.alias === config.defaultAlias) {
+            tags.push('默认');
+          }
+          if (workspace.alias === currentWorkspace.alias) {
+            tags.push('当前');
+          }
+          const suffix = tags.length > 0 ? ` [${tags.join(' / ')}]` : '';
+          return `- ${workspace.alias}${suffix}\n  ${workspace.path}`;
+        });
+        await this.sendDirectTextReply(
+          accountId,
+          peerUserId,
+          `项目列表：\n${lines.join('\n')}`,
+        );
+        return true;
+      }
+      case 'current': {
+        await this.sendDirectTextReply(
+          accountId,
+          peerUserId,
+          `当前项目：${currentWorkspace.alias}\n${currentWorkspace.path}`,
+        );
+        return true;
+      }
+      case 'switch': {
+        const targetWorkspace = getWorkspaceByAlias(config, command.alias);
+        if (!targetWorkspace) {
+          const aliases = config.workspaces.map((workspace) => workspace.alias).join(', ');
+          await this.sendDirectTextReply(
+            accountId,
+            peerUserId,
+            `未找到项目 ${command.alias}。\n可用项目：${aliases}`,
+          );
+          return true;
+        }
+
+        setWeixinActiveWorkspaceAlias(accountId, peerUserId, targetWorkspace.alias);
+        await this.sendDirectTextReply(
+          accountId,
+          peerUserId,
+          `已切换到项目 ${targetWorkspace.alias}\n${targetWorkspace.path}`,
+        );
+        return true;
+      }
+      case 'help': {
+        await this.sendDirectTextReply(
+          accountId,
+          peerUserId,
+          [
+            '可用命令：',
+            '- 项目列表',
+            '- 当前项目',
+            '- 切换项目 <alias>',
+            '- 帮助',
+            '',
+            `当前项目：${currentWorkspace.alias}`,
+          ].join('\n'),
+        );
+        return true;
+      }
+    }
   }
 
   private accountToCreds(account: {
