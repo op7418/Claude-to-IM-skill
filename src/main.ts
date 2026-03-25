@@ -15,7 +15,7 @@ import 'claude-to-im/src/lib/bridge/adapters/index.js';
 import './adapters/weixin-adapter.js';
 
 import type { LLMProvider } from 'claude-to-im/src/lib/bridge/host.js';
-import { loadConfig, configToSettings, CTI_HOME } from './config.js';
+import { loadConfig, saveConfig, configToSettings, CTI_HOME } from './config.js';
 import type { Config } from './config.js';
 import { JsonFileStore } from './store.js';
 import { SDKLLMProvider, resolveClaudeCliPath, preflightCheck } from './llm-provider.js';
@@ -25,6 +25,10 @@ import { setupLogger } from './logger.js';
 const RUNTIME_DIR = path.join(CTI_HOME, 'runtime');
 const STATUS_FILE = path.join(RUNTIME_DIR, 'status.json');
 const PID_FILE = path.join(RUNTIME_DIR, 'bridge.pid');
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 /**
  * Resolve the LLM provider based on the runtime setting.
@@ -133,9 +137,11 @@ async function main(): Promise<void> {
       pendingPerms.resolve(id, resolution),
   };
 
+  let currentLLM = llm;
+
   initBridgeContext({
     store,
-    llm,
+    llm: currentLLM,
     permissions: gateway,
     lifecycle: {
       onBridgeStart: () => {
@@ -155,6 +161,48 @@ async function main(): Promise<void> {
         writeStatus({ running: false });
         console.log('[claude-to-im] Bridge stopped');
       },
+    },
+    updateLLMProvider(provider: LLMProvider) {
+      currentLLM = provider;
+      const ctx = (globalThis as Record<string, unknown>)['__bridge_context__'] as Record<string, unknown>;
+      if (ctx) ctx.llm = provider;
+    },
+    async onCommand(command: string, args: string): Promise<string | undefined> {
+      if (command === '/runtime') {
+        const validRuntimes = ['claude', 'codex', 'auto'];
+        const newRuntime = args.trim().toLowerCase();
+
+        if (!newRuntime) {
+          return `Current runtime: <b>${config.runtime}</b>\nUsage: /runtime claude|codex|auto`;
+        }
+
+        if (!validRuntimes.includes(newRuntime)) {
+          return `Invalid runtime: <b>${escapeHtml(newRuntime)}</b>\nValid options: claude, codex, auto`;
+        }
+
+        if (newRuntime === config.runtime) {
+          return `Runtime is already <b>${config.runtime}</b>`;
+        }
+
+        try {
+          config.runtime = newRuntime as Config['runtime'];
+          saveConfig(config);
+          const newProvider = await resolveProvider(config, pendingPerms);
+          const ctx = (globalThis as Record<string, unknown>)['__bridge_context__'] as Record<string, unknown>;
+          if (ctx) ctx.llm = newProvider;
+          currentLLM = newProvider;
+          console.log(`[claude-to-im] Runtime switched to: ${newRuntime}`);
+          return `Runtime switched to <b>${newRuntime}</b>.\nNew sessions will use the ${newRuntime === 'codex' ? 'Codex' : newRuntime === 'auto' ? 'auto-detected' : 'Claude Code'} provider.`;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[claude-to-im] Failed to switch runtime: ${msg}`);
+          return `Failed to switch runtime: ${escapeHtml(msg)}`;
+        }
+      }
+      return undefined;
+    },
+    extraHelpLines(): string[] {
+      return ['/runtime claude|codex|auto - Switch LLM runtime'];
     },
   });
 
