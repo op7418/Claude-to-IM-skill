@@ -243,12 +243,15 @@ if [ "$CTI_RUNTIME" = "codex" ] || [ "$CTI_RUNTIME" = "auto" ]; then
   fi
 
   # Check Codex auth: any of CTI_CODEX_API_KEY / CODEX_API_KEY / OPENAI_API_KEY,
-  # or `codex auth status` showing logged-in (interactive login).
+  # or Codex login status showing logged-in.
   CODEX_AUTH=1
   if [ -n "${CTI_CODEX_API_KEY:-}" ] || [ -n "${CODEX_API_KEY:-}" ] || [ -n "${OPENAI_API_KEY:-}" ]; then
     CODEX_AUTH=0
   elif command -v codex &>/dev/null; then
     CODEX_AUTH_OUT=$(codex auth status 2>&1 || true)
+    if ! echo "$CODEX_AUTH_OUT" | grep -qiE 'logged.in|authenticated'; then
+      CODEX_AUTH_OUT=$(codex login status 2>&1 || true)
+    fi
     if echo "$CODEX_AUTH_OUT" | grep -qiE 'logged.in|authenticated'; then
       CODEX_AUTH=0
     fi
@@ -257,7 +260,7 @@ if [ "$CTI_RUNTIME" = "codex" ] || [ "$CTI_RUNTIME" = "auto" ]; then
     check "Codex auth available (API key or login)" 0
   else
     if [ "$CTI_RUNTIME" = "codex" ]; then
-      check "Codex auth available (set OPENAI_API_KEY or run 'codex auth login')" 1
+      check "Codex auth available (set OPENAI_API_KEY or run 'codex login')" 1
     else
       check "Codex auth available (not found — needed only for Codex fallback)" 0
     fi
@@ -286,7 +289,11 @@ fi
 
 # --- config.env permissions ---
 if [ -f "$CONFIG_FILE" ]; then
-  PERMS=$(stat -f "%Lp" "$CONFIG_FILE" 2>/dev/null || stat -c "%a" "$CONFIG_FILE" 2>/dev/null || echo "unknown")
+  if stat --version >/dev/null 2>&1; then
+    PERMS=$(stat -c "%a" "$CONFIG_FILE" 2>/dev/null || echo "unknown")
+  else
+    PERMS=$(stat -f "%Lp" "$CONFIG_FILE" 2>/dev/null || echo "unknown")
+  fi
   if [ "$PERMS" = "600" ]; then
     check "config.env permissions are 600" 0
   else
