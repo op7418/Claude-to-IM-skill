@@ -5,10 +5,23 @@
 # ── Public interface (called by daemon.sh) ──
 
 supervisor_start() {
+  local NODE_ARGS=()
+
+  # Optional: use system CA bundle (helps on distros with custom cert stores, e.g. SteamOS)
+  if [ -f /etc/ssl/certs/ca-certificates.crt ]; then
+    export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+  fi
+
+  # Optional: force IPv4-only DNS to fix ENETUNREACH on IPv6-broken networks (e.g. SteamOS with NVM)
+  # Set CTI_FORCE_IPV4=1 in your config.env to enable.
+  if [ "${CTI_FORCE_IPV4:-0}" = "1" ]; then
+    NODE_ARGS+=(--require "$SKILL_DIR/scripts/ipv4-patch.cjs")
+  fi
+
   if command -v setsid >/dev/null 2>&1; then
-    setsid node "$SKILL_DIR/dist/daemon.mjs" >> "$LOG_FILE" 2>&1 < /dev/null &
+    setsid node "${NODE_ARGS[@]}" "$SKILL_DIR/dist/daemon.mjs" >> "$LOG_FILE" 2>&1 < /dev/null &
   else
-    nohup node "$SKILL_DIR/dist/daemon.mjs" >> "$LOG_FILE" 2>&1 < /dev/null &
+    nohup node "${NODE_ARGS[@]}" "$SKILL_DIR/dist/daemon.mjs" >> "$LOG_FILE" 2>&1 < /dev/null &
   fi
   # Fallback: write shell $! as PID; main.ts will overwrite with real PID
   echo $! > "$PID_FILE"
