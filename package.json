@@ -7,7 +7,7 @@
     "build": "node scripts/build.js",
     "typecheck": "tsc --noEmit",
     "dev": "tsx src/main.ts",
-    "weixin:login": "node --import tsx src/weixin-login.ts",
+    "weixin:login": "node dist/weixin-login.mjs",
     "test": "CTI_HOME=$(mktemp -d) node --test --test-concurrency=1 --import tsx --test-timeout=15000 src/__tests__/*.test.ts"
   },
   "dependencies": {

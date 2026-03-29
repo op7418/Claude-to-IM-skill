@@ -20,6 +20,7 @@ const DATA_DIR = path.join(CTI_HOME, 'data');
 // current Weixin bridge intentionally runs in single-account mode.
 const ACCOUNTS_PATH = path.join(DATA_DIR, 'weixin-accounts.json');
 const CONTEXT_TOKENS_PATH = path.join(DATA_DIR, 'weixin-context-tokens.json');
+const ACTIVE_WORKSPACES_PATH = path.join(DATA_DIR, 'weixin-active-workspaces.json');
 const DEFAULT_BASE_URL = 'https://ilinkai.weixin.qq.com';
 const DEFAULT_CDN_BASE_URL = 'https://novac2c.cdn.weixin.qq.com/c2c';
 
@@ -121,6 +122,16 @@ function readContextTokens(): Record<string, string> {
 function writeContextTokens(tokens: Record<string, string>): void {
   ensureDir(DATA_DIR);
   atomicWrite(CONTEXT_TOKENS_PATH, JSON.stringify(tokens, null, 2));
+}
+
+function readActiveWorkspaceAliases(): Record<string, string> {
+  ensureDir(DATA_DIR);
+  return readJson<Record<string, string>>(ACTIVE_WORKSPACES_PATH, {});
+}
+
+function writeActiveWorkspaceAliases(aliases: Record<string, string>): void {
+  ensureDir(DATA_DIR);
+  atomicWrite(ACTIVE_WORKSPACES_PATH, JSON.stringify(aliases, null, 2));
 }
 
 function contextKey(accountId: string, peerUserId: string): string {
@@ -228,6 +239,26 @@ export function deleteWeixinContextTokensByAccount(accountId: string): void {
     Object.entries(tokens).filter(([key]) => !key.startsWith(`${accountId}::`)),
   );
   writeContextTokens(nextTokens);
+  deleteWeixinActiveWorkspacesByAccount(accountId);
+}
+
+export function getWeixinActiveWorkspaceAlias(accountId: string, peerUserId: string): string | undefined {
+  const aliases = readActiveWorkspaceAliases();
+  return aliases[contextKey(accountId, peerUserId)];
+}
+
+export function setWeixinActiveWorkspaceAlias(accountId: string, peerUserId: string, alias: string): void {
+  const aliases = readActiveWorkspaceAliases();
+  aliases[contextKey(accountId, peerUserId)] = alias;
+  writeActiveWorkspaceAliases(aliases);
+}
+
+export function deleteWeixinActiveWorkspacesByAccount(accountId: string): void {
+  const aliases = readActiveWorkspaceAliases();
+  const nextAliases = Object.fromEntries(
+    Object.entries(aliases).filter(([key]) => !key.startsWith(`${accountId}::`)),
+  );
+  writeActiveWorkspaceAliases(nextAliases);
 }
 
 export function getWeixinAccountsFilePath(): string {

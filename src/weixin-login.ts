@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import { CTI_HOME, loadConfig } from './config.js';
 import { startLoginQr, pollLoginQrStatus } from './adapters/weixin/weixin-api.js';
@@ -41,6 +42,7 @@ export function buildQrHtml(session: LoginSession, qrSvg: string): string {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content="5" />
     <title>Claude-to-IM WeChat Login</title>
     <style>
       :root { color-scheme: light; }
@@ -105,7 +107,7 @@ export function buildQrHtml(session: LoginSession, qrSvg: string): string {
       <div class="card">
         <h1>微信扫码登录 Claude-to-IM</h1>
         <p>请用手机微信扫描下面的二维码，并在手机上确认登录授权。</p>
-        <p class="muted">如果二维码过期，CLI 会自动刷新这个页面内容；如果浏览器没有更新，请手动刷新一次。</p>
+        <p class="muted">页面会每 5 秒自动刷新一次；如果二维码过期，CLI 重写 HTML 后浏览器会自动看到最新二维码。</p>
         <div class="qr">
           <div id="qrcode">${qrSvg}</div>
         </div>
@@ -187,6 +189,19 @@ async function refreshSession(previous: LoginSession, baseUrl?: string): Promise
   return next;
 }
 
+export function isWeixinLoginCliEntry(entryPath?: string, importUrl: string = import.meta.url): boolean {
+  if (!entryPath) {
+    return false;
+  }
+
+  const modulePath = fileURLToPath(importUrl);
+  try {
+    return fs.realpathSync(entryPath) === fs.realpathSync(modulePath);
+  } catch {
+    return path.resolve(entryPath) === path.resolve(modulePath);
+  }
+}
+
 export async function runWeixinLogin(): Promise<{ accountId: string; htmlPath: string }> {
   ensureRuntimeDir();
   const config = loadConfig();
@@ -261,10 +276,7 @@ export async function runWeixinLogin(): Promise<{ accountId: string; htmlPath: s
   }
 }
 
-const isMainModule = (() => {
-  const entry = process.argv[1];
-  return !!entry && path.resolve(entry) === path.resolve(new URL(import.meta.url).pathname);
-})();
+const isMainModule = isWeixinLoginCliEntry(process.argv[1], import.meta.url);
 
 if (isMainModule) {
   runWeixinLogin().catch((err) => {

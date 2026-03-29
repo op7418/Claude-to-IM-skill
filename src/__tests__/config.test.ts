@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { maskSecret, configToSettings, type Config } from '../config.js';
+import { maskSecret, configToSettings, quoteEnvValue, type Config } from '../config.js';
 
 // ── maskSecret ──
 
@@ -21,6 +21,20 @@ describe('maskSecret', () => {
 
   it('handles exactly 5 chars', () => {
     assert.equal(maskSecret('12345'), '*2345');
+  });
+});
+
+describe('quoteEnvValue', () => {
+  it('keeps simple values unquoted', () => {
+    assert.equal(quoteEnvValue('/tmp/project'), '/tmp/project');
+    assert.equal(quoteEnvValue('codex'), 'codex');
+  });
+
+  it('quotes values with spaces for shell-safe config.env output', () => {
+    assert.equal(
+      quoteEnvValue('/Users/jitian/Documents/TiDB Cloud Zero'),
+      '"/Users/jitian/Documents/TiDB Cloud Zero"',
+    );
   });
 });
 
