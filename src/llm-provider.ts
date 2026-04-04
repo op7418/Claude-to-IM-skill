@@ -508,8 +508,13 @@ export class SDKLLMProvider implements LLMProvider {
                   };
                 },
             };
-            if (cliPath) {
-              queryOptions.pathToClaudeCodeExecutable = cliPath;
+            // Prefer explicit env var to avoid SDK falling back to built-in official cli.js
+            // when resolveClaudeCliPath() occasionally returns undefined (e.g. --help timeout).
+            const resolvedCliPath = process.env.CTI_CLAUDE_CODE_EXECUTABLE || cliPath;
+            if (resolvedCliPath) {
+              queryOptions.pathToClaudeCodeExecutable = resolvedCliPath;
+            } else {
+              console.warn('[llm-provider] WARNING: pathToClaudeCodeExecutable is not set, SDK may fallback to built-in official cli.js!');
             }
 
             const prompt = buildPrompt(params.prompt, params.files);
@@ -531,6 +536,16 @@ export class SDKLLMProvider implements LLMProvider {
             }
 
             const isTransportExit = message.includes('process exited with code');
+
+            // ── Case 0: Benign exit code 1 with no stderr ──
+            // claude-internal often exits with code 1 after a successful response.
+            // When there is no meaningful stderr, this is normal teardown — suppress it.
+            const isCode1WithNoStderr = message.includes('process exited with code 1') && !stderrBuf.trim();
+            if (isCode1WithNoStderr) {
+              console.log('[llm-provider] Suppressing exit code 1 with no stderr — likely normal claude-internal exit');
+              controller.close();
+              return;
+            }
 
             // ── Case 1: Result already received ──
             // The SDK delivered a proper result (success or structured error).
