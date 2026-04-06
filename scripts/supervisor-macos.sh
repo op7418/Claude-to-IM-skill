@@ -2,9 +2,17 @@
 # macOS supervisor — launchd-based process management.
 # Sourced by daemon.sh; expects CTI_HOME, SKILL_DIR, PID_FILE, STATUS_FILE, LOG_FILE.
 
-LAUNCHD_LABEL="com.claude-to-im.bridge"
 PLIST_DIR="$HOME/Library/LaunchAgents"
-PLIST_FILE="$PLIST_DIR/$LAUNCHD_LABEL.plist"
+
+launchd_label() {
+  echo "${CTI_LAUNCHD_LABEL:-com.claude-to-im.bridge}"
+}
+
+plist_file() {
+  local label
+  label="$(launchd_label)"
+  echo "$PLIST_DIR/$label.plist"
+}
 
 # ── launchd helpers ──
 
@@ -59,19 +67,23 @@ build_env_dict() {
 
 generate_plist() {
   local node_path
+  local label
+  local plist_file_path
   node_path=$(command -v node)
+  label="$(launchd_label)"
+  plist_file_path="$(plist_file)"
 
   mkdir -p "$PLIST_DIR"
   local env_dict
   env_dict=$(build_env_dict)
 
-  cat > "$PLIST_FILE" <<PLIST
+  cat > "$plist_file_path" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>${LAUNCHD_LABEL}</string>
+    <string>${label}</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -110,27 +122,37 @@ PLIST
 # ── Public interface (called by daemon.sh) ──
 
 supervisor_start() {
-  launchctl bootout "gui/$(id -u)/$LAUNCHD_LABEL" 2>/dev/null || true
+  local label
+  local plist_file_path
+  label="$(launchd_label)"
+  plist_file_path="$(plist_file)"
+  launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
   generate_plist
-  launchctl bootstrap "gui/$(id -u)" "$PLIST_FILE"
-  launchctl kickstart -k "gui/$(id -u)/$LAUNCHD_LABEL"
+  launchctl bootstrap "gui/$(id -u)" "$plist_file_path"
+  launchctl kickstart -k "gui/$(id -u)/$label"
 }
 
 supervisor_stop() {
-  launchctl bootout "gui/$(id -u)/$LAUNCHD_LABEL" 2>/dev/null || true
+  local label
+  label="$(launchd_label)"
+  launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
   rm -f "$PID_FILE"
 }
 
 supervisor_is_managed() {
-  launchctl print "gui/$(id -u)/$LAUNCHD_LABEL" &>/dev/null
+  local label
+  label="$(launchd_label)"
+  launchctl print "gui/$(id -u)/$label" &>/dev/null
 }
 
 supervisor_status_extra() {
   if supervisor_is_managed; then
-    echo "Bridge is registered with launchd ($LAUNCHD_LABEL)"
+    local label
+    label="$(launchd_label)"
+    echo "Bridge is registered with launchd ($label)"
     # Extract PID from launchctl as the authoritative source
     local lc_pid
-    lc_pid=$(launchctl print "gui/$(id -u)/$LAUNCHD_LABEL" 2>/dev/null | grep -m1 'pid = ' | sed 's/.*pid = //' | tr -d ' ')
+    lc_pid=$(launchctl print "gui/$(id -u)/$label" 2>/dev/null | grep -m1 'pid = ' | sed 's/.*pid = //' | tr -d ' ')
     if [ -n "$lc_pid" ] && [ "$lc_pid" != "0" ] && [ "$lc_pid" != "-" ]; then
       echo "launchd reports PID: $lc_pid"
     fi
@@ -141,8 +163,10 @@ supervisor_status_extra() {
 supervisor_is_running() {
   # Primary: launchctl knows the process
   if supervisor_is_managed; then
+    local label
     local lc_pid
-    lc_pid=$(launchctl print "gui/$(id -u)/$LAUNCHD_LABEL" 2>/dev/null | grep -m1 'pid = ' | sed 's/.*pid = //' | tr -d ' ')
+    label="$(launchd_label)"
+    lc_pid=$(launchctl print "gui/$(id -u)/$label" 2>/dev/null | grep -m1 'pid = ' | sed 's/.*pid = //' | tr -d ' ')
     if [ -n "$lc_pid" ] && [ "$lc_pid" != "0" ] && [ "$lc_pid" != "-" ]; then
       return 0
     fi

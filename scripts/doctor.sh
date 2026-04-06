@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
-CTI_HOME="$HOME/.claude-to-im"
+# Instance isolation:
+# - CTI_HOME controls config/log/pid/status paths checked by doctor
+# - CTI_LAUNCHD_LABEL controls the target launchd job on macOS
+CTI_HOME="${CTI_HOME:-$HOME/.claude-to-im}"
+CTI_LAUNCHD_LABEL="${CTI_LAUNCHD_LABEL:-com.claude-to-im.bridge}"
 CONFIG_FILE="$CTI_HOME/config.env"
 PID_FILE="$CTI_HOME/runtime/bridge.pid"
 LOG_FILE="$CTI_HOME/logs/bridge.log"
+LAUNCHD_PLIST_FILE="$HOME/Library/LaunchAgents/$CTI_LAUNCHD_LABEL.plist"
 
 PASS=0
 FAIL=0
+
+launchd_pid() {
+  if [ "$(uname -s)" = "Darwin" ]; then
+    launchctl print "gui/$(id -u)/$CTI_LAUNCHD_LABEL" 2>/dev/null | grep -m1 'pid = ' | sed 's/.*pid = //' | tr -d ' '
+  else
+    echo ""
+  fi
+}
 
 check() {
   local label="$1"
@@ -40,6 +53,7 @@ SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CTI_RUNTIME=$(get_config CTI_RUNTIME)
 CTI_RUNTIME="${CTI_RUNTIME:-claude}"
 echo "Runtime: $CTI_RUNTIME"
+echo "Instance: CTI_HOME=$CTI_HOME, CTI_LAUNCHD_LABEL=$CTI_LAUNCHD_LABEL"
 echo ""
 
 # --- Claude CLI available (claude/auto modes) ---
@@ -167,11 +181,9 @@ if [ "$CTI_RUNTIME" = "claude" ] || [ "$CTI_RUNTIME" = "auto" ]; then
   if [ "$HAS_ANTHROPIC_CONFIG" = "true" ]; then
     check "ANTHROPIC_* vars in config.env (third-party API provider)" 0
 
-    PLIST_FILE="$HOME/Library/LaunchAgents/com.claude-to-im.bridge.plist"
-
     # On macOS, verify the launchd plist also has the vars
-    if [ "$(uname -s)" = "Darwin" ] && [ -f "$PLIST_FILE" ]; then
-      if grep -q "ANTHROPIC_" "$PLIST_FILE" 2>/dev/null; then
+    if [ "$(uname -s)" = "Darwin" ] && [ -f "$LAUNCHD_PLIST_FILE" ]; then
+      if grep -q "ANTHROPIC_" "$LAUNCHD_PLIST_FILE" 2>/dev/null; then
         check "ANTHROPIC_* vars in launchd plist" 0
       else
         check "ANTHROPIC_* vars in launchd plist (NOT present — restart bridge to regenerate plist)" 1
@@ -182,7 +194,10 @@ if [ "$CTI_RUNTIME" = "claude" ] || [ "$CTI_RUNTIME" = "auto" ]; then
     # The plist may be correct on disk but if the daemon hasn't been
     # restarted since the plist was regenerated, it still runs with the
     # old environment.
-    BRIDGE_PID=$(cat "$PID_FILE" 2>/dev/null || true)
+    BRIDGE_PID=$(launchd_pid)
+    if [ -z "$BRIDGE_PID" ] || [ "$BRIDGE_PID" = "0" ] || [ "$BRIDGE_PID" = "-" ]; then
+      BRIDGE_PID=$(cat "$PID_FILE" 2>/dev/null || true)
+    fi
     if [ -n "$BRIDGE_PID" ] && kill -0 "$BRIDGE_PID" 2>/dev/null; then
       # ps eww shows the process environment on macOS/Linux
       PROC_ENV=$(ps eww -p "$BRIDGE_PID" 2>/dev/null || true)
@@ -411,9 +426,21 @@ else
 fi
 
 # --- PID file consistency ---
-if [ -f "$PID_FILE" ]; then
-  PID=$(cat "$PID_FILE")
-  if kill -0 "$PID" 2>/dev/null; then
+LAUNCHD_PID=$(launchd_pid)
+if [ -n "$LAUNCHD_PID" ] && [ "$LAUNCHD_PID" != "0" ] && [ "$LAUNCHD_PID" != "-" ]; then
+  if [ -f "$PID_FILE" ]; then
+    PID=$(cat "$PID_FILE" 2>/dev/null || true)
+    if [ "$PID" = "$LAUNCHD_PID" ]; then
+      check "PID file consistent (launchd process $LAUNCHD_PID is running)" 0
+    else
+      check "PID file consistent (launchd pid=$LAUNCHD_PID but pid file has $PID)" 1
+    fi
+  else
+    check "PID file consistent (launchd pid=$LAUNCHD_PID but PID file missing)" 1
+  fi
+elif [ -f "$PID_FILE" ]; then
+  PID=$(cat "$PID_FILE" 2>/dev/null || true)
+  if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
     check "PID file consistent (process $PID is running)" 0
   else
     check "PID file consistent (stale PID $PID, process not running)" 1

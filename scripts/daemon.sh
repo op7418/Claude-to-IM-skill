@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Instance isolation:
+# - CTI_HOME controls runtime/data/log/config directory
+# - CTI_LAUNCHD_LABEL controls the launchd job name on macOS
 CTI_HOME="${CTI_HOME:-$HOME/.claude-to-im}"
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PID_FILE="$CTI_HOME/runtime/bridge.pid"
@@ -188,7 +191,7 @@ case "${1:-help}" in
       else
         echo "Bridge was not running (stale PID file)"
       fi
-      rm -f "$PID_FILE"
+      rm -f "$PID_FILE" 2>/dev/null || true
     fi
     ;;
 
@@ -209,7 +212,9 @@ case "${1:-help}" in
       cat "$STATUS_FILE" 2>/dev/null
     else
       echo "Bridge is not running"
-      [ -f "$PID_FILE" ] && rm -f "$PID_FILE"
+      if [ -f "$PID_FILE" ]; then
+        rm -f "$PID_FILE" 2>/dev/null || true
+      fi
       show_last_exit_reason
     fi
     ;;
