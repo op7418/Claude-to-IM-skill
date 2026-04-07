@@ -35,6 +35,8 @@ type CodexInstance = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ThreadInstance = any;
 
+type CodexSandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
+
 /**
  * Map bridge permission modes to Codex approval policies.
  * - 'acceptEdits' (code mode) → 'on-failure' (auto-approve most things)
@@ -58,6 +60,70 @@ function shouldPassModelToCodex(): boolean {
 /** Allow Codex to run outside a trusted Git repository when explicitly enabled. */
 function shouldSkipGitRepoCheck(): boolean {
   return process.env.CTI_CODEX_SKIP_GIT_REPO_CHECK === 'true';
+}
+
+function parseBooleanEnv(name: string): boolean | undefined {
+  const raw = process.env[name];
+  if (raw === undefined) return undefined;
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return undefined;
+}
+
+function getSandboxMode(permissionMode?: string): CodexSandboxMode {
+  const raw = process.env.CTI_CODEX_SANDBOX_MODE;
+  if (raw === 'read-only' || raw === 'workspace-write' || raw === 'danger-full-access') {
+    return raw;
+  }
+
+  switch (permissionMode) {
+    case 'acceptEdits':
+      return 'workspace-write';
+    case 'plan':
+    case 'default':
+    default:
+      return 'read-only';
+  }
+}
+
+function getAdditionalDirectories(): string[] | undefined {
+  const raw = process.env.CTI_CODEX_ADDITIONAL_DIRECTORIES
+    || process.env.CTI_CODEX_ADDITIONAL_DIRS;
+  if (!raw) return undefined;
+  const dirs = raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return dirs.length > 0 ? dirs : undefined;
+}
+
+function getTurnSignal(abortController?: AbortController): AbortSignal | undefined {
+  const signals: AbortSignal[] = [];
+  const timeoutRaw = process.env.CTI_CODEX_TURN_TIMEOUT_MS;
+  const timeoutMs = timeoutRaw ? Number(timeoutRaw) : NaN;
+
+  if (abortController?.signal) {
+    signals.push(abortController.signal);
+  }
+  if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+    signals.push(AbortSignal.timeout(timeoutMs));
+  }
+  if (signals.length === 0) return undefined;
+  if (signals.length === 1) return signals[0];
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any(signals);
+  }
+
+  const merged = new AbortController();
+  const abort = () => merged.abort();
+  for (const signal of signals) {
+    if (signal.aborted) {
+      merged.abort();
+      break;
+    }
+    signal.addEventListener('abort', abort, { once: true });
+  }
+  return merged.signal;
 }
 
 function shouldRetryFreshThread(message: string): boolean {
@@ -127,11 +193,18 @@ export class CodexProvider implements LLMProvider {
 
             const approvalPolicy = toApprovalPolicy(params.permissionMode);
             const passModel = shouldPassModelToCodex();
+            const sandboxMode = getSandboxMode(params.permissionMode);
+            const networkAccessEnabled = parseBooleanEnv('CTI_CODEX_NETWORK_ENABLED');
+            const additionalDirectories = getAdditionalDirectories();
+            const turnSignal = getTurnSignal(params.abortController);
 
             const threadOptions: Record<string, unknown> = {
               ...(passModel && params.model ? { model: params.model } : {}),
               ...(params.workingDirectory ? { workingDirectory: params.workingDirectory } : {}),
+              sandboxMode,
               ...(shouldSkipGitRepoCheck() ? { skipGitRepoCheck: true } : {}),
+              ...(networkAccessEnabled !== undefined ? { networkAccessEnabled } : {}),
+              ...(additionalDirectories ? { additionalDirectories } : {}),
               approvalPolicy,
             };
 
@@ -175,7 +248,10 @@ export class CodexProvider implements LLMProvider {
 
               let sawAnyEvent = false;
               try {
-                const { events } = await thread.runStreamed(input);
+                const { events } = await thread.runStreamed(
+                  input,
+                  turnSignal ? { signal: turnSignal } : undefined,
+                );
 
                 for await (const event of events) {
                   sawAnyEvent = true;
