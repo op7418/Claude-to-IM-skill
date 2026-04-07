@@ -30,6 +30,30 @@
 5. For Feishu: confirm the app has been approved and event subscriptions are configured
 6. Check logs for incoming message events: `/claude-to-im logs 200`
 
+## Session looks stuck
+
+**Symptoms**: One task starts, but later messages in the same chat get no useful reply or appear to hang forever.
+
+**Steps**:
+
+1. Send `/stop` in the same chat to interrupt the current session task
+2. If you want a clean thread, send `/new`
+3. Check whether the bridge is repeatedly waiting on one long Codex turn: `/claude-to-im logs 200`
+4. Optionally set a turn timeout in `config.env`:
+   ```bash
+   CTI_CODEX_TURN_TIMEOUT_MS=1800000
+   ```
+5. Restart the bridge after config changes:
+   ```bash
+   /claude-to-im stop
+   /claude-to-im start
+   ```
+
+**Notes**:
+
+- Newer bridge builds return an explicit "task still running" message instead of silently queueing later chat messages.
+- If the task is truly stuck, the bridge can auto-stop it after the idle window set by `CTI_ACTIVE_TASK_STALE_MS` (default 15 minutes).
+
 ## Permission timeout
 
 **Symptoms**: Claude Code session starts but times out waiting for tool approval.
@@ -39,6 +63,53 @@
 1. The bridge runs Claude Code in non-interactive mode; ensure your Claude Code configuration allows the necessary tools
 2. Consider using `--allowedTools` in your configuration to pre-approve common tools
 3. Check network connectivity if the timeout occurs during API calls
+
+For Feishu / QQ / WeChat, permission replies are text-based:
+
+- Reply `1` to allow once
+- Reply `2` to allow the session
+- Reply `3` to deny
+- Or use `/perm allow|allow_session|deny <id>`
+
+If you want fully automatic approvals in a trusted environment, set:
+
+```bash
+CTI_AUTO_APPROVE=true
+```
+
+## Codex cannot SSH or use git
+
+**Symptoms**: Codex from Feishu / WeChat can edit local files, but `ssh`, `git fetch/pull/push`, or git operations involving credentials keep failing.
+
+**Steps**:
+
+1. Enable Codex network access in `config.env`:
+   ```bash
+   CTI_CODEX_NETWORK_ENABLED=true
+   ```
+2. Give Codex the right sandbox level:
+   ```bash
+   CTI_CODEX_SANDBOX_MODE=workspace-write
+   ```
+   If your workflow depends on `~/.ssh`, `~/.gitconfig`, or other home-directory credentials, you may need:
+   ```bash
+   CTI_CODEX_SANDBOX_MODE=danger-full-access
+   ```
+3. If you want to keep `workspace-write`, explicitly grant the extra directories Codex needs:
+   ```bash
+   CTI_CODEX_ADDITIONAL_DIRECTORIES=$HOME/.ssh,$HOME/.config/git
+   ```
+4. Prefer SSH keys or a preconfigured git credential helper. Interactive password prompts are fragile in bridge-driven sessions.
+5. Restart the bridge after config changes:
+   ```bash
+   /claude-to-im stop
+   /claude-to-im start
+   ```
+
+**Notes**:
+
+- `git add` / `git commit` may still trigger a permission request unless you approve it in chat or enable `CTI_AUTO_APPROVE=true`.
+- Network-enabled Codex is a security tradeoff. Only use it in chats you control.
 
 ## High memory usage
 

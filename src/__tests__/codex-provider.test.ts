@@ -419,6 +419,126 @@ describe('CodexProvider', () => {
     }
   });
 
+  it('passes abort signal to runStreamed so /stop can interrupt Codex turns', async () => {
+    const { CodexProvider } = await import('../codex-provider.js');
+    const { PendingPermissions } = await import('../permission-gateway.js');
+    const provider = new CodexProvider(new PendingPermissions());
+
+    let capturedTurnOptions: Record<string, unknown> | undefined;
+    const mockThread = {
+      runStreamed: (_input: unknown, turnOptions?: Record<string, unknown>) => {
+        capturedTurnOptions = turnOptions;
+        return {
+          events: (async function* () {
+            yield { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0 } };
+          })(),
+        };
+      },
+    };
+    (provider as any).sdk = { Codex: class { constructor() {} } };
+    (provider as any).codex = {
+      startThread: () => mockThread,
+    };
+
+    const abortController = new AbortController();
+    const stream = provider.streamChat({
+      prompt: 'stop me',
+      sessionId: 'abortable-session',
+      abortController,
+    });
+    await collectStream(stream);
+
+    assert.equal(capturedTurnOptions?.signal, abortController.signal);
+  });
+
+  it('derives sandbox, network, and additional directories from config env', async () => {
+    const oldSandbox = process.env.CTI_CODEX_SANDBOX_MODE;
+    const oldNetwork = process.env.CTI_CODEX_NETWORK_ENABLED;
+    const oldDirs = process.env.CTI_CODEX_ADDITIONAL_DIRECTORIES;
+    process.env.CTI_CODEX_SANDBOX_MODE = 'danger-full-access';
+    process.env.CTI_CODEX_NETWORK_ENABLED = 'true';
+    process.env.CTI_CODEX_ADDITIONAL_DIRECTORIES = '/tmp/one,/tmp/two';
+
+    try {
+      const { CodexProvider } = await import('../codex-provider.js');
+      const { PendingPermissions } = await import('../permission-gateway.js');
+      const provider = new CodexProvider(new PendingPermissions());
+
+      let capturedStartOptions: Record<string, unknown> | undefined;
+      const mockThread = {
+        runStreamed: () => ({
+          events: (async function* () {
+            yield { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0 } };
+          })(),
+        }),
+      };
+      (provider as any).sdk = { Codex: class { constructor() {} } };
+      (provider as any).codex = {
+        startThread: (opts: Record<string, unknown>) => {
+          capturedStartOptions = opts;
+          return mockThread;
+        },
+      };
+
+      const stream = provider.streamChat({
+        prompt: 'hello',
+        sessionId: 'sandbox-session',
+        permissionMode: 'acceptEdits',
+      });
+      await collectStream(stream);
+
+      assert.equal(capturedStartOptions?.sandboxMode, 'danger-full-access');
+      assert.equal(capturedStartOptions?.networkAccessEnabled, true);
+      assert.deepEqual(capturedStartOptions?.additionalDirectories, ['/tmp/one', '/tmp/two']);
+    } finally {
+      if (oldSandbox === undefined) delete process.env.CTI_CODEX_SANDBOX_MODE;
+      else process.env.CTI_CODEX_SANDBOX_MODE = oldSandbox;
+      if (oldNetwork === undefined) delete process.env.CTI_CODEX_NETWORK_ENABLED;
+      else process.env.CTI_CODEX_NETWORK_ENABLED = oldNetwork;
+      if (oldDirs === undefined) delete process.env.CTI_CODEX_ADDITIONAL_DIRECTORIES;
+      else process.env.CTI_CODEX_ADDITIONAL_DIRECTORIES = oldDirs;
+    }
+  });
+
+  it('defaults code mode to workspace-write sandbox when unset', async () => {
+    const oldSandbox = process.env.CTI_CODEX_SANDBOX_MODE;
+    delete process.env.CTI_CODEX_SANDBOX_MODE;
+    try {
+      const { CodexProvider } = await import('../codex-provider.js');
+      const { PendingPermissions } = await import('../permission-gateway.js');
+      const provider = new CodexProvider(new PendingPermissions());
+
+      let capturedStartOptions: Record<string, unknown> | undefined;
+      const mockThread = {
+        runStreamed: () => ({
+          events: (async function* () {
+            yield { type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1, cached_input_tokens: 0 } };
+          })(),
+        }),
+      };
+      (provider as any).sdk = { Codex: class { constructor() {} } };
+      (provider as any).codex = {
+        startThread: (opts: Record<string, unknown>) => {
+          capturedStartOptions = opts;
+          return mockThread;
+        },
+      };
+
+      const stream = provider.streamChat({
+        prompt: 'hello',
+        sessionId: 'default-sandbox-session',
+        permissionMode: 'acceptEdits',
+      });
+      await collectStream(stream);
+
+      assert.equal(capturedStartOptions?.sandboxMode, 'workspace-write');
+    } finally {
+      if (oldSandbox !== undefined) {
+        process.env.CTI_CODEX_SANDBOX_MODE = oldSandbox;
+      }
+    }
+  });
+
   it('retries with fresh thread when resume fails before any events', async () => {
     const { CodexProvider } = await import('../codex-provider.js');
     const { PendingPermissions } = await import('../permission-gateway.js');
