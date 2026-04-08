@@ -24,6 +24,7 @@ import { CTI_HOME } from './config.js';
 
 const DATA_DIR = path.join(CTI_HOME, 'data');
 const MESSAGES_DIR = path.join(DATA_DIR, 'messages');
+const STATE_DIR = path.join(DATA_DIR, 'session-states');
 
 // ── CLI Session Interface ──
 
@@ -40,6 +41,31 @@ export interface CliSession {
   entrypoint: string;     // Entry point (e.g., "cli")
   name: string;           // Session name/alias (e.g., "enhance-session-management")
   isActive: boolean;      // Whether the process is still running
+}
+
+// ── Session State Interface ──
+
+/**
+ * Session state for bridge synchronization.
+ * Stored in ~/.claude-to-im/data/session-states/{sdkSessionId}.json
+ */
+export interface SessionState {
+  sessionId: string;              // SDK session ID
+  cliPid?: number;                // CLI process ID (from hook)
+  cliTty?: string;                // CLI TTY path (from hook)
+  cliStartedAt?: string;          // CLI start time
+  cliEndedAt?: string;            // CLI end time
+  cliResumedAt?: string;          // Last CLI resume time
+  lastCliActivityAt?: string;     // Last CLI activity
+
+  lastTakenOverAt?: string;       // Last taken over by bridge
+  lastBridgeMessageAt?: string;   // Last bridge message time
+  lastBridgeSummary?: string;     // Last bridge message summary
+  takenOverBy?: {
+    channelType: string;
+    chatId: string;
+    userName?: string;
+  };
 }
 
 // ── Helpers ──
@@ -567,5 +593,190 @@ export class JsonFileStore implements BridgeStore {
   setChannelOffset(key: string, offset: string): void {
     this.offsets.set(key, offset);
     this.persistOffsets();
+  }
+
+  // ── Session State Management (for Bridge-CLI synchronization) ──
+
+  /**
+   * Get the state file path for a session.
+   * State files are stored in ~/.claude-to-im/data/session-states/{sdkSessionId}.json
+   */
+  private getSessionStatePath(sdkSessionId: string): string {
+    ensureDir(STATE_DIR);
+    return path.join(STATE_DIR, `${sdkSessionId}.json`);
+  }
+
+  /**
+   * Read session state from file.
+   * Returns null if the file doesn't exist or can't be read.
+   */
+  getSessionState(sdkSessionId: string): SessionState | null {
+    return readJson<SessionState | null>(
+      this.getSessionStatePath(sdkSessionId),
+      null,
+    );
+  }
+
+  /**
+   * Write session state to file.
+   */
+  private writeSessionState(sdkSessionId: string, state: SessionState): void {
+    writeJson(this.getSessionStatePath(sdkSessionId), state);
+  }
+
+  /**
+   * Mark a session as taken over by the bridge.
+   * Called when /bind is used to take over a CLI session.
+   */
+  markSessionTakenOver(
+    sdkSessionId: string,
+    channelType: string,
+    chatId: string,
+    userName?: string,
+  ): void {
+    if (!sdkSessionId) return;
+
+    const state = this.getSessionState(sdkSessionId) || { sessionId: sdkSessionId };
+
+    state.lastTakenOverAt = now();
+    state.takenOverBy = {
+      channelType,
+      chatId,
+      userName,
+    };
+
+    this.writeSessionState(sdkSessionId, state);
+
+    // Also try to send a real-time notification to the CLI TTY
+    if (state.cliTty) {
+      const message = [
+        '',
+        '='.repeat(60),
+        '⚠️  此 Session 已在飞书上被接管',
+        '='.repeat(60),
+        `接管时间: ${new Date().toLocaleString('zh-CN')}`,
+        '如果继续在此终端操作，可能会与飞书侧产生冲突。',
+        '建议关闭此终端或使用 claude --resume 重新开始。',
+        '='.repeat(60),
+        '',
+      ].join('\n');
+      this.writeToTty(state.cliTty, message);
+    }
+  }
+
+  /**
+   * Record bridge activity (message sent/received).
+   * Called after handling a message from the IM channel.
+   */
+  recordBridgeActivity(sdkSessionId: string, summary: string): void {
+    if (!sdkSessionId) return;
+
+    const state = this.getSessionState(sdkSessionId);
+    if (!state) return;
+
+    state.lastBridgeMessageAt = now();
+    state.lastBridgeSummary = summary.slice(0, 500);  // Limit size
+
+    this.writeSessionState(sdkSessionId, state);
+
+    // Also send a real-time notification to the CLI TTY if available
+    if (state.cliTty) {
+      const shortSummary = summary.length > 100 ? summary.slice(0, 100) + '...' : summary;
+      const message = `\n📩 [飞书] ${new Date().toLocaleTimeString('zh-CN')}: ${shortSummary}\n`;
+      this.writeToTty(state.cliTty, message);
+    }
+  }
+
+  // ── TTY Notification (Real-time Echo) ──
+
+  /**
+   * Write a message directly to a TTY device.
+   * This allows real-time notification to CLI sessions.
+   */
+  writeToTty(tty: string, message: string): boolean {
+    if (!tty || !fs.existsSync(tty)) {
+      return false;
+    }
+
+    try {
+      fs.writeFileSync(tty, message + '\n', 'utf-8');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Send a notification to a CLI session via TTY.
+   * Looks up the TTY from session state.
+   */
+  notifyCliSession(sdkSessionId: string, message: string): boolean {
+    const state = this.getSessionState(sdkSessionId);
+    if (!state || !state.cliTty) {
+      return false;
+    }
+    return this.writeToTty(state.cliTty, message);
+  }
+
+  // ── CLI Session Process Management ──
+
+  /**
+   * Terminate a CLI session process.
+   * Uses SIGTERM first, then SIGKILL if process doesn't exit.
+   * Returns true if the process was terminated successfully.
+   */
+  terminateCliSession(sdkSessionId: string): { success: boolean; reason: string } {
+    const state = this.getSessionState(sdkSessionId);
+    if (!state || !state.cliPid) {
+      return { success: false, reason: 'No process information found' };
+    }
+
+    const pid = state.cliPid;
+
+    try {
+      // Check if process is still running
+      if (!this.isProcessActive(pid)) {
+        return { success: true, reason: 'Process already exited' };
+      }
+
+      // Try SIGTERM first (graceful termination)
+      process.kill(pid, 'SIGTERM');
+
+      // Wait a bit and check if it exited
+      let attempts = 0;
+      const maxAttempts = 5;
+      while (attempts < maxAttempts && this.isProcessActive(pid)) {
+        // Sleep for 200ms
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+        attempts++;
+      }
+
+      if (this.isProcessActive(pid)) {
+        // Process didn't exit gracefully, try SIGKILL
+        try {
+          process.kill(pid, 'SIGKILL');
+          return { success: true, reason: 'Process terminated with SIGKILL (after SIGTERM timeout)' };
+        } catch {
+          return { success: false, reason: 'Failed to terminate process with SIGKILL' };
+        }
+      }
+
+      return { success: true, reason: 'Process terminated gracefully with SIGTERM' };
+    } catch (error) {
+      const err = error as Error;
+      return { success: false, reason: `Error: ${err.message}` };
+    }
+  }
+
+  /**
+   * Get CLI session info including TTY and process info from state file.
+   * Combines information from both ~/.claude/sessions/ and state file.
+   */
+  getCliSessionWithState(sessionId: string): (CliSession & { state?: SessionState }) | null {
+    const cliSession = this.getCliSession(sessionId);
+    if (!cliSession) return null;
+
+    const state = this.getSessionState(cliSession.sessionId);
+    return { ...cliSession, state };
   }
 }

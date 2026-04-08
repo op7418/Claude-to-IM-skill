@@ -19,6 +19,7 @@
     "@openai/codex-sdk": "^0.110.0"
   },
   "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^22",
     "esbuild": "^0.25.0",
     "tsx": "^4.21.0",
