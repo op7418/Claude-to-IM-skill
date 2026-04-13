@@ -467,6 +467,7 @@ export class SDKLLMProvider implements LLMProvider {
               resume: params.sdkSessionId || undefined,
               abortController: params.abortController,
               permissionMode: (params.permissionMode as 'default' | 'acceptEdits' | 'plan') || undefined,
+              settingSources: ['user', 'project', 'local'],
               includePartialMessages: true,
               env: cleanEnv,
               stderr: (data: string) => {
