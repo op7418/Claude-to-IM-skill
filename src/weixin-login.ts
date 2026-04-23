@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import QRCode from 'qrcode';
 import { CTI_HOME, loadConfig } from './config.js';
@@ -263,7 +264,7 @@ export async function runWeixinLogin(): Promise<{ accountId: string; htmlPath: s
 
 const isMainModule = (() => {
   const entry = process.argv[1];
-  return !!entry && path.resolve(entry) === path.resolve(new URL(import.meta.url).pathname);
+  return !!entry && path.resolve(entry) === path.resolve(fileURLToPath(import.meta.url));
 })();
 
 if (isMainModule) {
