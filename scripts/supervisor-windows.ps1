@@ -33,8 +33,8 @@ $SkillDir   = Split-Path -Parent (Split-Path -Parent $PSCommandPath)
 $RuntimeDir = Join-Path $CtiHome 'runtime'
 $PidFile    = Join-Path $RuntimeDir 'bridge.pid'
 $StatusFile = Join-Path $RuntimeDir 'status.json'
-$LogFile    = Join-Path $CtiHome 'logs' 'bridge.log'
-$DaemonMjs  = Join-Path $SkillDir 'dist' 'daemon.mjs'
+$LogFile    = Join-Path (Join-Path $CtiHome 'logs') 'bridge.log'
+$DaemonMjs  = Join-Path (Join-Path $SkillDir 'dist') 'daemon.mjs'
 
 $ServiceName = 'ClaudeToIMBridge'
 
@@ -72,9 +72,9 @@ function Read-Pid {
 }
 
 function Test-PidAlive {
-    param([string]$Pid)
-    if (-not $Pid) { return $false }
-    try { $null = Get-Process -Id ([int]$Pid) -ErrorAction Stop; return $true }
+    param([string]$ProcId)
+    if (-not $ProcId) { return $false }
+    try { $null = Get-Process -Id ([int]$ProcId) -ErrorAction Stop; return $true }
     catch { return $false }
 }
 
@@ -210,8 +210,33 @@ function Install-NSSMService {
 
 # ── Fallback: Start-Process (no service manager) ──
 
+function Load-ConfigEnv {
+    # Load ~/.claude-to-im/config.env into process env so the daemon inherits
+    # CTI_* vars (the POSIX daemon.sh does this via `source`; on Windows the
+    # shell branch exits before that line, so we replicate it here).
+    $configFile = Join-Path $CtiHome 'config.env'
+    if (-not (Test-Path $configFile)) { return }
+    foreach ($line in Get-Content $configFile) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith('#')) { continue }
+        $eq = $trimmed.IndexOf('=')
+        if ($eq -lt 1) { continue }
+        $key = $trimmed.Substring(0, $eq).Trim()
+        $value = $trimmed.Substring($eq + 1).Trim()
+        # Strip matching surrounding quotes
+        if (($value.StartsWith('"') -and $value.EndsWith('"')) -or
+            ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+        [System.Environment]::SetEnvironmentVariable($key, $value)
+    }
+}
+
 function Start-Fallback {
     $nodePath = Get-NodePath
+
+    # Load config.env first (Windows-specific — daemon.sh skips its source step)
+    Load-ConfigEnv
 
     # Clean env
     $envClone = [System.Collections.Hashtable]::new()
@@ -221,12 +246,13 @@ function Start-Fallback {
     # Remove CLAUDECODE
     [System.Environment]::SetEnvironmentVariable('CLAUDECODE', $null)
 
+    $ErrLogFile = "$LogFile.err"
     $proc = Start-Process -FilePath $nodePath `
         -ArgumentList $DaemonMjs `
         -WorkingDirectory $SkillDir `
         -WindowStyle Hidden `
         -RedirectStandardOutput $LogFile `
-        -RedirectStandardError $LogFile `
+        -RedirectStandardError $ErrLogFile `
         -PassThru
 
     # Write initial PID (main.ts will overwrite with real PID)
@@ -267,7 +293,7 @@ switch ($Command) {
             }
         } else {
             Write-Host "Starting bridge (background process)..."
-            $pid = Start-Fallback
+            $startedPid = Start-Fallback
             Start-Sleep -Seconds 3
 
             $newPid = Read-Pid
@@ -294,10 +320,10 @@ switch ($Command) {
             Write-Host "Bridge stopped"
             if (Test-Path $PidFile) { Remove-Item $PidFile -Force }
         } else {
-            $pid = Read-Pid
-            if (-not $pid) { Write-Host "No bridge running"; exit 0 }
-            if (Test-PidAlive $pid) {
-                Stop-Process -Id ([int]$pid) -Force
+            $runPid = Read-Pid
+            if (-not $runPid) { Write-Host "No bridge running"; exit 0 }
+            if (Test-PidAlive $runPid) {
+                Stop-Process -Id ([int]$runPid) -Force
                 Write-Host "Bridge stopped"
             } else {
                 Write-Host "Bridge was not running (stale PID file)"
@@ -307,7 +333,7 @@ switch ($Command) {
     }
 
     'status' {
-        $pid = Read-Pid
+        $runPid = Read-Pid
 
         # Check Windows Service
         $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -315,8 +341,8 @@ switch ($Command) {
             Write-Host "Windows Service '$ServiceName': $($svc.Status)"
         }
 
-        if ($pid -and (Test-PidAlive $pid)) {
-            Write-Host "Bridge process is running (PID: $pid)"
+        if ($runPid -and (Test-PidAlive $runPid)) {
+            Write-Host "Bridge process is running (PID: $runPid)"
             if (Test-StatusRunning) {
                 Write-Host "Bridge status: running"
             } else {
