@@ -210,8 +210,33 @@ function Install-NSSMService {
 
 # ── Fallback: Start-Process (no service manager) ──
 
+function Load-ConfigEnv {
+    # Load ~/.claude-to-im/config.env into process env so the daemon inherits
+    # CTI_* vars (the POSIX daemon.sh does this via `source`; on Windows the
+    # shell branch exits before that line, so we replicate it here).
+    $configFile = Join-Path $CtiHome 'config.env'
+    if (-not (Test-Path $configFile)) { return }
+    foreach ($line in Get-Content $configFile) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith('#')) { continue }
+        $eq = $trimmed.IndexOf('=')
+        if ($eq -lt 1) { continue }
+        $key = $trimmed.Substring(0, $eq).Trim()
+        $value = $trimmed.Substring($eq + 1).Trim()
+        # Strip matching surrounding quotes
+        if (($value.StartsWith('"') -and $value.EndsWith('"')) -or
+            ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+        [System.Environment]::SetEnvironmentVariable($key, $value)
+    }
+}
+
 function Start-Fallback {
     $nodePath = Get-NodePath
+
+    # Load config.env first (Windows-specific — daemon.sh skips its source step)
+    Load-ConfigEnv
 
     # Clean env
     $envClone = [System.Collections.Hashtable]::new()
