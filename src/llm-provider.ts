@@ -469,6 +469,9 @@ export class SDKLLMProvider implements LLMProvider {
               permissionMode: (params.permissionMode as 'default' | 'acceptEdits' | 'plan') || undefined,
               includePartialMessages: true,
               env: cleanEnv,
+              ...(params.systemPrompt ? {
+                systemPrompt: { type: 'preset', preset: 'claude_code', append: params.systemPrompt },
+              } : {}),
               stderr: (data: string) => {
                 stderrBuf += data;
                 if (stderrBuf.length > MAX_STDERR) {
