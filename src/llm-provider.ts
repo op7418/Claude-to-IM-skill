@@ -463,6 +463,11 @@ export class SDKLLMProvider implements LLMProvider {
 
             const queryOptions: Record<string, unknown> = {
               cwd: params.workingDirectory,
+              // Required so the SDK loads <cwd>/CLAUDE.md (project memory) +
+              // ~/.claude/CLAUDE.md (user memory). Without 'project', the
+              // bridge-spawned Claude has no project context. Per agent SDK
+              // docs: "Must include 'project' to load CLAUDE.md files."
+              settingSources: ['user', 'project'],
               model,
               resume: params.sdkSessionId || undefined,
               abortController: params.abortController,
