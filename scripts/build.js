@@ -1,4 +1,10 @@
 import * as esbuild from 'esbuild';
+import { execSync } from 'child_process';
+
+// Patch feishu adapter: cardkit.v2 -> v1 REST API before build
+try {
+  execSync('bash scripts/patch-feishu-cardkit.sh', { stdio: 'inherit' });
+} catch {}
 
 await esbuild.build({
   entryPoints: ['src/main.ts'],
