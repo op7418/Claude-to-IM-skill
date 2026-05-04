@@ -6,6 +6,7 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKMessage, PermissionResult } from '@anthropic-ai/claude-agent-sdk';
@@ -130,6 +131,88 @@ export function buildSubprocessEnv(): Record<string, string> {
   }
 
   return out;
+}
+
+// ── Project skills auto-discovery ──
+
+/**
+ * Recursively discover skill names from a project's `.claude/skills/` directory.
+ *
+ * Scans both the project-level `{cwd}/.claude/skills/` and the global
+ * `~/.claude/skills/` directories. Each subdirectory that contains a
+ * `SKILL.md` file is treated as a valid skill. The skill name is read
+ * from the YAML frontmatter `name:` field if present, otherwise the
+ * directory name is used.
+ *
+ * @param cwd - The project working directory
+ * @returns Array of deduplicated skill names
+ */
+export function discoverProjectSkills(cwd: string): string[] {
+  const skillDirs = [
+    // Project-level skills
+    path.join(cwd, '.claude', 'skills'),
+    // Global user skills
+    path.join(process.env.HOME || '~', '.claude', 'skills'),
+  ];
+
+  const seen = new Set<string>();
+  const skills: string[] = [];
+
+  for (const dir of skillDirs) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      // Directory doesn't exist or is not readable — skip silently
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+
+      const skillPath = path.join(dir, entry.name);
+      const skillMdPath = path.join(skillPath, 'SKILL.md');
+
+      try {
+        fs.accessSync(skillMdPath, fs.constants.R_OK);
+      } catch {
+        // No readable SKILL.md — not a valid skill directory
+        continue;
+      }
+
+      // Read skill name from SKILL.md YAML frontmatter
+      const name = readSkillName(skillMdPath) || entry.name;
+      if (!seen.has(name)) {
+        seen.add(name);
+        skills.push(name);
+      }
+    }
+  }
+
+  if (skills.length > 0) {
+    console.log(`[llm-provider] Discovered skills: ${skills.join(', ')}`);
+  }
+
+  return skills;
+}
+
+/**
+ * Extract the `name` field from a SKILL.md YAML frontmatter.
+ * Returns undefined if not found.
+ */
+function readSkillName(skillMdPath: string): string | undefined {
+  try {
+    const content = fs.readFileSync(skillMdPath, 'utf-8');
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    if (!frontmatterMatch) return undefined;
+
+    const frontmatter = frontmatterMatch[1];
+    // Match `name: value` (handle quoted and unquoted values)
+    const nameMatch = frontmatter.match(/^name:\s*["']?(.+?)["']?\s*$/m);
+    return nameMatch?.[1]?.trim();
+  } catch {
+    return undefined;
+  }
 }
 
 // ── Claude CLI preflight check ──
@@ -469,6 +552,10 @@ export class SDKLLMProvider implements LLMProvider {
               permissionMode: (params.permissionMode as 'default' | 'acceptEdits' | 'plan') || undefined,
               includePartialMessages: true,
               env: cleanEnv,
+              // Load project-level settings (CLAUDE.md, .claude/settings.json, skills)
+              settingSources: ['user', 'project', 'local'],
+              // Auto-discover skills from project + global .claude/skills/ directories
+              skills: discoverProjectSkills(params.workingDirectory),
               stderr: (data: string) => {
                 stderrBuf += data;
                 if (stderrBuf.length > MAX_STDERR) {

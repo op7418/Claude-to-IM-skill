@@ -2,7 +2,12 @@
 # macOS supervisor — launchd-based process management.
 # Sourced by daemon.sh; expects CTI_HOME, SKILL_DIR, PID_FILE, STATUS_FILE, LOG_FILE.
 
-LAUNCHD_LABEL="com.claude-to-im.bridge"
+# Derive a unique launchd label from CTI_HOME so multiple instances can coexist
+_cti_home_suffix=""
+if [ "$CTI_HOME" != "$HOME/.claude-to-im" ]; then
+  _cti_home_suffix="-$(basename "$CTI_HOME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]//g')"
+fi
+LAUNCHD_LABEL="com.claude-to-im.bridge${_cti_home_suffix}"
 PLIST_DIR="$HOME/Library/LaunchAgents"
 PLIST_FILE="$PLIST_DIR/$LAUNCHD_LABEL.plist"
 
@@ -58,6 +63,11 @@ build_env_dict() {
 }
 
 generate_plist() {
+  if [ "${CTI_RUN_AT_LOAD:-false}" = "true" ]; then
+    RUN_AT_LOAD_XML="<true/>"
+  else
+    RUN_AT_LOAD_XML="<false/>"
+  fi
   local node_path
   node_path=$(command -v node)
 
@@ -88,7 +98,7 @@ generate_plist() {
     <string>${LOG_FILE}</string>
 
     <key>RunAtLoad</key>
-    <false/>
+    ${RUN_AT_LOAD_XML:-<false/>}
 
     <key>KeepAlive</key>
     <dict>
