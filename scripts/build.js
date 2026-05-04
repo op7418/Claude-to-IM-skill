@@ -1,4 +1,12 @@
 import * as esbuild from 'esbuild';
+import { pathToFileURL } from 'url';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Patch feishu adapter: cardkit.v2 -> v1 REST API before build (cross-platform)
+await import(join(__dirname, 'patch-feishu-cardkit.js'));
 
 await esbuild.build({
   entryPoints: ['src/main.ts'],
