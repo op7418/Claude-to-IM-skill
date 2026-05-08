@@ -210,9 +210,16 @@ export class JsonFileStore implements BridgeStore {
     const key = `${data.channelType}:${data.chatId}`;
     const existing = this.bindings.get(key);
     if (existing) {
+      const sessionChanged = existing.codepilotSessionId !== data.codepilotSessionId;
+      const sdkSessionId = data.sdkSessionId !== undefined
+        ? data.sdkSessionId
+        : sessionChanged
+          ? ''
+          : existing.sdkSessionId;
       const updated: ChannelBinding = {
         ...existing,
         codepilotSessionId: data.codepilotSessionId,
+        sdkSessionId,
         workingDirectory: data.workingDirectory,
         model: data.model,
         updatedAt: now(),
