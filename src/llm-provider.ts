@@ -6,6 +6,7 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKMessage, PermissionResult } from '@anthropic-ai/claude-agent-sdk';
@@ -132,10 +133,192 @@ export function buildSubprocessEnv(): Record<string, string> {
   return out;
 }
 
+// ── Project skills auto-discovery ──
+
+/**
+ * Recursively discover skill names from a project's `.claude/skills/` directory.
+ *
+ * Scans both the project-level `{cwd}/.claude/skills/` and the global
+ * `~/.claude/skills/` directories. Each subdirectory that contains a
+ * `SKILL.md` file is treated as a valid skill. The skill name is read
+ * from the YAML frontmatter `name:` field if present, otherwise the
+ * directory name is used.
+ *
+ * @param cwd - The project working directory
+ * @returns Array of deduplicated skill names
+ */
+export function discoverProjectSkills(cwd: string): string[] {
+  const skillDirs = [
+    // Project-level skills
+    path.join(cwd, '.claude', 'skills'),
+    // Global user skills
+    path.join(process.env.HOME || '~', '.claude', 'skills'),
+  ];
+
+  const seen = new Set<string>();
+  const skills: string[] = [];
+
+  for (const dir of skillDirs) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      // Directory doesn't exist or is not readable — skip silently
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+
+      const skillPath = path.join(dir, entry.name);
+      const skillMdPath = path.join(skillPath, 'SKILL.md');
+
+      try {
+        fs.accessSync(skillMdPath, fs.constants.R_OK);
+      } catch {
+        // No readable SKILL.md — not a valid skill directory
+        continue;
+      }
+
+      // Read skill name from SKILL.md YAML frontmatter
+      const name = readSkillName(skillMdPath) || entry.name;
+      if (!seen.has(name)) {
+        seen.add(name);
+        skills.push(name);
+      }
+    }
+  }
+
+  if (skills.length > 0) {
+    console.log(`[llm-provider] Discovered skills: ${skills.join(', ')}`);
+  }
+
+  return skills;
+}
+
+/**
+ * Extract the `name` field from a SKILL.md YAML frontmatter.
+ * Returns undefined if not found.
+ */
+function readSkillName(skillMdPath: string): string | undefined {
+  try {
+    const content = fs.readFileSync(skillMdPath, 'utf-8');
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    if (!frontmatterMatch) return undefined;
+
+    const frontmatter = frontmatterMatch[1];
+    // Match `name: value` (handle quoted and unquoted values)
+    const nameMatch = frontmatter.match(/^name:\s*["']?(.+?)["']?\s*$/m);
+    return nameMatch?.[1]?.trim();
+  } catch {
+    return undefined;
+  }
+}
+
 // ── Claude CLI preflight check ──
 
 /** Minimum major version of Claude CLI required by the SDK. */
 const MIN_CLI_MAJOR = 2;
+
+// ── Project agents auto-discovery ──
+
+/** SDK AgentDefinition shape (subset — only what we need) */
+interface DiscoveredAgentDefinition {
+  description: string;
+  prompt: string;
+  tools?: string[];
+}
+
+/**
+ * Discover project-level agents from `.claude/agents/*.md` files.
+ *
+ * Each `.md` file is parsed: YAML frontmatter provides `description` (and
+ * optional `tools`), the Markdown body becomes the `prompt`.
+ *
+ * @param cwd - The project working directory
+ * @returns Record mapping agent name → AgentDefinition
+ */
+export function discoverProjectAgents(cwd: string): Record<string, DiscoveredAgentDefinition> {
+  const agentDirs = [
+    // Project-level agents
+    path.join(cwd, '.claude', 'agents'),
+    // Global user agents
+    path.join(process.env.HOME || '~', '.claude', 'agents'),
+  ];
+
+  const agents: Record<string, DiscoveredAgentDefinition> = {};
+  const seen = new Set<string>();
+
+  for (const dir of agentDirs) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+
+      const filePath = path.join(dir, entry.name);
+      const parsed = parseAgentMd(filePath);
+      if (!parsed) continue;
+
+      const name = parsed.name;
+      if (seen.has(name)) continue;
+      seen.add(name);
+
+      agents[name] = {
+        description: parsed.description || name,
+        prompt: parsed.prompt,
+      };
+    }
+  }
+
+  const names = Object.keys(agents);
+  if (names.length > 0) {
+    console.log(`[llm-provider] Discovered agents: ${names.join(', ')}`);
+  }
+
+  return agents;
+}
+
+/**
+ * Parse an agent `.md` file into its components.
+ * Returns undefined if the file is invalid or missing frontmatter.
+ */
+function parseAgentMd(filePath: string): { name: string; description: string; prompt: string } | undefined {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+    if (!frontmatterMatch) return undefined;
+
+    const frontmatter = frontmatterMatch[1];
+    const prompt = frontmatterMatch[2].trim();
+    if (!prompt) return undefined;
+
+    // Extract name
+    const nameMatch = frontmatter.match(/^name:\s*["']?(.+?)["']?\s*$/m);
+    if (!nameMatch) return undefined;
+    const name = nameMatch[1].trim();
+
+    // Extract description (may be multi-line quoted string)
+    let description = '';
+    const descMatch = frontmatter.match(/^description:\s*["']?([\s\S]*?)["']?\s*$/m);
+    if (descMatch) {
+      description = descMatch[1].trim()
+        // Handle multi-line descriptions with \n literals
+        .replace(/\\n/g, ' ')
+        // Take only the first paragraph / first sentence as summary
+        .split(/[.。!！][\s]|[\n]/)[0]
+        .trim();
+    }
+
+    return { name, description, prompt };
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Parse a version string like "2.3.1" or "claude 2.3.1" into a major number.
@@ -469,6 +652,12 @@ export class SDKLLMProvider implements LLMProvider {
               permissionMode: (params.permissionMode as 'default' | 'acceptEdits' | 'plan') || undefined,
               includePartialMessages: true,
               env: cleanEnv,
+              // Load project-level settings (CLAUDE.md, .claude/settings.json, skills)
+              settingSources: ['user', 'project', 'local'],
+              // Auto-discover skills from project + global .claude/skills/ directories
+              skills: discoverProjectSkills(params.workingDirectory),
+              // Auto-discover agents from project + global .claude/agents/ directories
+              agents: discoverProjectAgents(params.workingDirectory),
               stderr: (data: string) => {
                 stderrBuf += data;
                 if (stderrBuf.length > MAX_STDERR) {
