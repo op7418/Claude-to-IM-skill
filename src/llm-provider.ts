@@ -469,6 +469,16 @@ export class SDKLLMProvider implements LLMProvider {
               permissionMode: (params.permissionMode as 'default' | 'acceptEdits' | 'plan') || undefined,
               includePartialMessages: true,
               env: cleanEnv,
+              // Claude Agent SDK defaults settingSources to [], while the CLI
+              // (claude / claude -p / claude --output-format stream-json) defaults
+              // to ['user', 'project', 'local']. Without this, child processes
+              // spawned via the SDK silently skip loading ~/.claude.json and
+              // cwd/.mcp.json — every user-level and project-level MCP server
+              // (plaud-recorder, iflytek-recorder, flomo, any custom .mcp.json
+              // entry) disappears from the tool menu. The bridge user expects
+              // their bot to have the same tools their local Claude Code session
+              // has, so we explicitly opt in to all three sources.
+              settingSources: ['user', 'project', 'local'],
               stderr: (data: string) => {
                 stderrBuf += data;
                 if (stderrBuf.length > MAX_STDERR) {
