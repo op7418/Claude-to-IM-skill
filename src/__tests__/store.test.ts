@@ -72,6 +72,29 @@ describe('JsonFileStore', () => {
     assert.equal(b2.codepilotSessionId, 'sess-2');
   });
 
+  it('upsertChannelBinding clears sdkSessionId when explicitly set to empty string', () => {
+    const store = new JsonFileStore(makeSettings());
+    const b1 = store.upsertChannelBinding({
+      channelType: 'feishu',
+      chatId: 'chat-1',
+      codepilotSessionId: 'old-session',
+      workingDirectory: '/tmp',
+      model: 'model-1',
+    });
+    store.updateChannelBinding(b1.id, { sdkSessionId: 'old-thread' });
+
+    const b2 = store.upsertChannelBinding({
+      channelType: 'feishu',
+      chatId: 'chat-1',
+      codepilotSessionId: 'new-session',
+      sdkSessionId: '',
+      workingDirectory: '/tmp',
+      model: 'model-1',
+    });
+
+    assert.equal(b2.sdkSessionId, '');
+  });
+
   it('upsertChannelBinding uses default mode from settings', () => {
     const settings = makeSettings();
     settings.set('bridge_default_mode', 'plan');
