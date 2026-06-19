@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.62",
-    "claude-to-im": "file:../Claude-to-IM",
+    "claude-to-im": "file:./Claude-to-IM",
     "qrcode": "^1.5.4"
   },
   "optionalDependencies": {
