@@ -72,6 +72,7 @@ export interface GetUpdatesResponse {
   errcode?: number;
   errmsg?: string;
   msgs?: WeixinMessage[];
+  sync_buf?: string;
   get_updates_buf?: string;
   longpolling_timeout_ms?: number;
 }

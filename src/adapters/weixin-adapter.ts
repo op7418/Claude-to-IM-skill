@@ -199,8 +199,8 @@ export class WeixinAdapter extends BaseChannelAdapter {
         const { store } = getBridgeContext();
         const offsetKey = `weixin:${accountId}`;
         const rawOffset = store.getChannelOffset(offsetKey);
-        const cursor = rawOffset === '0' ? '' : rawOffset;
-        const response: GetUpdatesResponse = await getUpdates(creds, cursor);
+        const requestCursor = rawOffset === '0' ? '' : rawOffset;
+        const response: GetUpdatesResponse = await getUpdates(creds, requestCursor);
 
         if (response.errcode === ERRCODE_SESSION_EXPIRED) {
           setPaused(accountId, 'Session expired (errcode -14)');
@@ -214,11 +214,14 @@ export class WeixinAdapter extends BaseChannelAdapter {
         let batchId: number | undefined;
         let batchCompleted = false;
 
-        if (response.msgs && response.msgs.length > 0 && response.get_updates_buf) {
+        const responseCursor = response.sync_buf || response.get_updates_buf;
+        const hasCursor = !!responseCursor;
+
+        if (response.msgs && response.msgs.length > 0 && hasCursor) {
           batchId = this.nextBatchId++;
           this.pendingCursors.set(batchId, {
             offsetKey,
-            cursor: response.get_updates_buf,
+            cursor: responseCursor,
             remaining: 0,
             sealed: false,
           });
@@ -233,7 +236,7 @@ export class WeixinAdapter extends BaseChannelAdapter {
           }
         }
 
-        if (batchId !== undefined && response.get_updates_buf) {
+        if (batchId !== undefined && responseCursor) {
           const batch = this.pendingCursors.get(batchId);
           if (batchCompleted && batch) {
             batch.sealed = true;
