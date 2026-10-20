@@ -120,6 +120,33 @@ npm run build
 
 **Codex:** Start a new session and say `claude-to-im setup`, `start bridge`, or `帮我接微信桥接`.
 
+## Web search from IM
+
+For Claude sessions with no saved search configuration, the bridge automatically
+adds [Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp).
+Ask your bot to search for current documentation or read a web page. Search uses
+Fast mode; search and page fetching need no Parallel account or API key. The usual
+IM tool approval flow still applies. Anonymous usage has rate limits.
+
+Set `CTI_SEARCH_PROVIDER` in `~/.claude-to-im/config.env` and restart the bridge:
+
+| Value | Claude web tools |
+|---|---|
+| `auto` (default) | Parallel search and fetch for an unconfigured setup; native web tools are removed for that session. |
+| `builtin` | Keep the SDK's original behavior and native Claude web tools. |
+| `off` | Do not add Parallel; remove native Claude web tools. |
+
+Auto leaves the SDK's behavior unchanged when it finds saved MCP or plugin settings,
+search API keys, web-tool permission rules, managed configuration, or unreadable
+configuration. It checks user and ancestor project configuration without editing
+those files. This does not enable loading settings that the SDK otherwise ignores.
+Separately configured MCP tools and shell networking are outside this switch.
+Codex sessions keep their existing behavior. A failed Parallel request is returned
+as a tool error; it does not silently switch search providers.
+
+Search queries and fetched URLs are sent to Parallel when its tools are called.
+See [SECURITY.md](SECURITY.md#web-search) for the data flow and controls.
+
 ## Updating the Skill
 
 Choose the update flow that matches both your AI agent product and your installation method.
@@ -362,6 +389,14 @@ See [references/troubleshooting.md](references/troubleshooting.md) for more deta
 - See [SECURITY.md](SECURITY.md) for threat model and incident response
 
 ## Development
+
+The `claude-to-im` dependency is a sibling checkout (`../Claude-to-IM`). Prepare
+it before installing this project:
+
+```bash
+git clone https://github.com/op7418/Claude-to-IM.git ../Claude-to-IM
+npm --prefix ../Claude-to-IM ci
+```
 
 ```bash
 npm install        # Install dependencies

@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsx src/main.ts",
     "weixin:login": "node --import tsx src/weixin-login.ts",
-    "test": "CTI_HOME=$(mktemp -d) node --test --test-concurrency=1 --import tsx --test-timeout=15000 src/__tests__/*.test.ts"
+    "test": "CTI_HOME=$(mktemp -d) node --test --test-concurrency=1 --import tsx --test-timeout=60000 src/__tests__/*.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.62",

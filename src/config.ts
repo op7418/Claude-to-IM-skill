@@ -1,9 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { parseSearchProvider, type SearchProvider } from './search-config.js';
 
 export interface Config {
   runtime: 'claude' | 'codex' | 'auto';
+  searchProvider?: SearchProvider;
   enabledChannels: string[];
   defaultWorkDir: string;
   defaultModel?: string;
@@ -82,6 +84,7 @@ export function loadConfig(): Config {
 
   return {
     runtime,
+    searchProvider: parseSearchProvider(env.get('CTI_SEARCH_PROVIDER') || process.env.CTI_SEARCH_PROVIDER),
     enabledChannels: splitCsv(env.get("CTI_ENABLED_CHANNELS")) ?? [],
     defaultWorkDir: env.get("CTI_DEFAULT_WORKDIR") || process.cwd(),
     defaultModel: env.get("CTI_DEFAULT_MODEL") || undefined,
@@ -125,6 +128,7 @@ function formatEnvLine(key: string, value: string | undefined): string {
 export function saveConfig(config: Config): void {
   let out = "";
   out += formatEnvLine("CTI_RUNTIME", config.runtime);
+  out += formatEnvLine('CTI_SEARCH_PROVIDER', config.searchProvider);
   out += formatEnvLine(
     "CTI_ENABLED_CHANNELS",
     config.enabledChannels.join(",")
