@@ -20,7 +20,7 @@ All tokens and secrets are masked in log output and terminal display. Only the l
 This project operates as a **single-user local daemon**:
 
 - The daemon runs on the user's local machine under their user account
-- No network listeners are opened; the daemon connects outbound to IM platform APIs only
+- No network listeners are opened; the daemon and its agent subprocess connect outbound to IM platforms, the configured model service and enabled tools
 - Authentication is handled by the IM platform's bot token mechanism
 - Access control is enforced via allowed user/channel ID lists configured per platform
 
@@ -29,6 +29,21 @@ The primary threats are:
 - **Token leakage**: Mitigated by file permissions, log redaction, and `.gitignore`
 - **Unauthorized message senders**: Mitigated by allowed user ID filtering per platform
 - **Local privilege escalation**: Mitigated by running as unprivileged user process
+
+## Web Search
+
+For Claude sessions without saved search configuration, the bridge registers the
+HTTPS endpoint `https://search.parallel.ai/mcp`. Search queries and fetched URLs
+are sent to Parallel when the agent invokes its tools. Tool output returns to the
+agent and may appear in the IM conversation. The bridge does not attach IM tokens
+or a Parallel API key to these requests. The usual tool approval flow applies.
+
+Set `CTI_SEARCH_PROVIDER=builtin` to retain native Claude web tools, or `off` to
+omit Parallel and remove the native web tools. This switch is not a network
+sandbox: shell commands and separately configured MCP servers can still access
+the network. Existing MCP/search settings, search permission rules, search API
+keys, managed configuration and unreadable configuration suppress automatic
+Parallel registration. This does not change which settings sources the SDK loads.
 
 ## Token Rotation
 

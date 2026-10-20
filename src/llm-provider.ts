@@ -13,6 +13,7 @@ import type { LLMProvider, StreamChatParams, FileAttachment } from 'claude-to-im
 import type { PendingPermissions } from './permission-gateway.js';
 
 import { sseEvent } from './sse-utils.js';
+import { resolveSearchOptions } from './search-config.js';
 
 // ── Environment isolation ──
 
@@ -422,6 +423,7 @@ export interface StreamState {
 export class SDKLLMProvider implements LLMProvider {
   private cliPath: string | undefined;
   private autoApprove: boolean;
+  private runQuery = query;
 
   constructor(private pendingPerms: PendingPermissions, cliPath?: string, autoApprove = false) {
     this.cliPath = cliPath;
@@ -432,6 +434,7 @@ export class SDKLLMProvider implements LLMProvider {
     const pendingPerms = this.pendingPerms;
     const cliPath = this.cliPath;
     const autoApprove = this.autoApprove;
+    const runQuery = this.runQuery;
 
     return new ReadableStream({
       start(controller) {
@@ -462,6 +465,7 @@ export class SDKLLMProvider implements LLMProvider {
             }
 
             const queryOptions: Record<string, unknown> = {
+              ...resolveSearchOptions(params.workingDirectory || process.cwd()),
               cwd: params.workingDirectory,
               model,
               resume: params.sdkSessionId || undefined,
@@ -513,7 +517,7 @@ export class SDKLLMProvider implements LLMProvider {
             }
 
             const prompt = buildPrompt(params.prompt, params.files);
-            const q = query({
+            const q = runQuery({
               prompt: prompt as Parameters<typeof query>[0]['prompt'],
               options: queryOptions as Parameters<typeof query>[0]['options'],
             });

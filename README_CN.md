@@ -120,6 +120,30 @@ npm run build
 
 **Codex：** 启动新会话，说 `claude-to-im setup`、`start bridge` 或 `帮我接微信桥接`。
 
+## 在 IM 中搜索网页
+
+当 Claude 会话没有已保存的搜索配置时，桥接会自动添加
+[Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp)。
+可以让机器人搜索最新文档或读取网页。搜索使用 Fast 模式，搜索和网页提取无需
+Parallel 账号或 API Key，仍通过原有的 IM 工具审批流程。匿名服务有用量限制。
+
+在 `~/.claude-to-im/config.env` 中设置 `CTI_SEARCH_PROVIDER`，然后重启桥接：
+
+| 值 | Claude 网页工具行为 |
+|---|---|
+| `auto`（默认） | 未配置搜索时使用 Parallel 搜索和网页提取，并移除该会话的原生网页工具。 |
+| `builtin` | 保持 SDK 原有行为和 Claude 原生网页工具。 |
+| `off` | 不添加 Parallel，并移除 Claude 原生网页工具。 |
+
+Auto 会检查用户配置和工作目录各级父目录中的项目配置。发现 MCP 配置、搜索
+API Key、网页工具权限规则、托管配置或无法读取的配置时，保持 SDK 原有行为，
+不会改写配置文件，也不会启用 SDK 原本未加载的设置。此开关不管理另行配置的
+MCP 工具和 Shell 网络访问。Codex 会话保持原有行为。Parallel 请求失败时返回
+工具错误，不会自动切换搜索服务。
+
+调用工具时，搜索查询和待提取的 URL 会发送到 Parallel。数据流和控制方式见
+[SECURITY.md](SECURITY.md#web-search)。
+
 ## 更新 Skill
 
 请按你的 AI Agent 产品和安装方式选择对应的更新方式。
@@ -362,6 +386,13 @@ start bridge
 - 详见 [SECURITY.md](SECURITY.md) 了解威胁模型和应急响应
 
 ## 开发
+
+`claude-to-im` 依赖使用同级目录（`../Claude-to-IM`）中的源码，安装本项目之前先准备依赖：
+
+```bash
+git clone https://github.com/op7418/Claude-to-IM.git ../Claude-to-IM
+npm --prefix ../Claude-to-IM ci
+```
 
 ```bash
 npm install        # 安装依赖
