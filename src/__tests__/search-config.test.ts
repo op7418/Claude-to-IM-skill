@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { SDKLLMProvider } from '../llm-provider.js';
 import { PendingPermissions } from '../permission-gateway.js';
 import {
@@ -63,6 +64,8 @@ describe('Claude search configuration', () => {
     ['MCP restrictions', 'home/.claude/settings.json', { permissions: { ask: ['mcp__custom__search'] } }],
     ['wildcard restrictions', 'home/.claude/settings.json', { permissions: { deny: ['*'] } }],
     ['saved API key', 'home/.claude/settings.json', { env: { TAVILY_API_KEY: 'configured-test-key' } }],
+    ['enabled plugin', 'home/.claude/settings.json', { enabledPlugins: { 'search@my-tools': true } }],
+    ['disabled plugin', 'project/.claude/settings.json', { enabledPlugins: { 'search@my-tools': false } }],
   ] as const) {
     it(`preserves ${label} without modifying the file`, () => {
       const f = fixture();
@@ -157,5 +160,47 @@ describe('Claude search configuration', () => {
         assert.equal(Boolean(captured.disallowedTools), ['off', 'auto'].includes(selection), selection);
       }
     } finally { process.env = oldEnv; f.close(); }
+  });
+
+  it('loads and saves the config.env choice and passes it to a direct Node provider startup', () => {
+    const f = fixture();
+    try {
+      const ctiHome = path.join(f.root, 'cti');
+      fs.mkdirSync(ctiHome);
+      const script = `
+        import assert from 'node:assert/strict';
+        import fs from 'node:fs';
+        import { loadConfig, saveConfig, CONFIG_PATH } from ${JSON.stringify(new URL('../config.ts', import.meta.url).href)};
+        import { SDKLLMProvider } from ${JSON.stringify(new URL('../llm-provider.ts', import.meta.url).href)};
+        import { PendingPermissions } from ${JSON.stringify(new URL('../permission-gateway.ts', import.meta.url).href)};
+        for (const choice of ['off', 'builtin', 'auto']) {
+          fs.writeFileSync(CONFIG_PATH, 'CTI_SEARCH_PROVIDER=' + choice + '\\n');
+          const config = loadConfig();
+          assert.equal(config.searchProvider, choice);
+          saveConfig(config);
+          assert.equal(loadConfig().searchProvider, choice);
+          let options;
+          const provider = new SDKLLMProvider(new PendingPermissions(), undefined, false, config.searchProvider);
+          provider.runQuery = (args) => {
+            options = args.options;
+            return (async function* () {
+              yield { type: 'result', subtype: 'success', session_id: 'fixture', is_error: false };
+            })();
+          };
+          for await (const _ of provider.streamChat({ prompt: 'search', sessionId: 'direct-node', workingDirectory: ${JSON.stringify(f.cwd)} })) {}
+          assert.equal(Boolean(options.mcpServers), choice === 'auto');
+          assert.equal(Boolean(options.disallowedTools), choice !== 'builtin');
+        }
+        fs.writeFileSync(CONFIG_PATH, 'CTI_SEARCH_PROVIDER=invalid\\n');
+        assert.throws(loadConfig, /CTI_SEARCH_PROVIDER must be/);
+      `;
+      const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
+        env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot,
+          HOME: f.home, USERPROFILE: f.home, CTI_HOME: ctiHome,
+          CTI_SEARCH_PROVIDER: 'auto', CLAUDE_CONFIG_DIR: path.join(f.root, 'claude') },
+        encoding: 'utf8', timeout: 10_000,
+      });
+      assert.equal(result.status, 0, result.stderr || String(result.error));
+    } finally { f.close(); }
   });
 });

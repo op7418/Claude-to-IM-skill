@@ -41,7 +41,7 @@ or a Parallel API key to these requests. The usual tool approval flow applies.
 Set `CTI_SEARCH_PROVIDER=builtin` to retain native Claude web tools, or `off` to
 omit Parallel and remove the native web tools. This switch is not a network
 sandbox: shell commands and separately configured MCP servers can still access
-the network. Existing MCP/search settings, search permission rules, search API
+the network. Existing MCP/plugin/search settings, search permission rules, search API
 keys, managed configuration and unreadable configuration suppress automatic
 Parallel registration. This does not change which settings sources the SDK loads.
 

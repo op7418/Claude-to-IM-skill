@@ -136,7 +136,7 @@ Set `CTI_SEARCH_PROVIDER` in `~/.claude-to-im/config.env` and restart the bridge
 | `builtin` | Keep the SDK's original behavior and native Claude web tools. |
 | `off` | Do not add Parallel; remove native Claude web tools. |
 
-Auto leaves the SDK's behavior unchanged when it finds saved MCP settings,
+Auto leaves the SDK's behavior unchanged when it finds saved MCP or plugin settings,
 search API keys, web-tool permission rules, managed configuration, or unreadable
 configuration. It checks user and ancestor project configuration without editing
 those files. This does not enable loading settings that the SDK otherwise ignores.

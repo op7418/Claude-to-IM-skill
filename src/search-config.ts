@@ -9,7 +9,16 @@ export const PARALLEL_SEARCH_AGENT = 'claude-to-im-skill/0.1.0';
 export const PARALLEL_SEARCH_SERVER = 'cti-parallel-search';
 
 type SearchOptions = Pick<Options, 'mcpServers' | 'disallowedTools'>;
+export type SearchProvider = 'auto' | 'builtin' | 'off';
 const WEB_TOOLS = ['WebSearch', 'WebFetch'];
+
+export function parseSearchProvider(value?: string): SearchProvider {
+  const provider = value || 'auto';
+  if (provider !== 'auto' && provider !== 'builtin' && provider !== 'off') {
+    throw new Error('CTI_SEARCH_PROVIDER must be auto, builtin, or off');
+  }
+  return provider;
+}
 
 /** These credentials indicate that search was intentionally configured elsewhere. */
 const SEARCH_KEYS = [
@@ -27,6 +36,11 @@ function record(value: unknown): value is Record<string, unknown> {
 function hasSearchChoice(value: unknown): boolean {
   if (!record(value)) return false;
   for (const [key, entry] of Object.entries(value)) {
+    // Plugins can supply search via their own MCP servers. Preserve even a
+    // saved disabled plugin rather than adding a different provider over it.
+    if (/plugin/i.test(key) && (typeof entry === 'boolean'
+      || (Array.isArray(entry) && entry.length > 0)
+      || (record(entry) && Object.keys(entry).length > 0))) return true;
     // Claude's onboarding file contains empty MCP maps/lists even before the
     // user configures any tools. Those are not a saved provider choice.
     if (/mcp/i.test(key) && (typeof entry === 'boolean'
@@ -100,13 +114,13 @@ function configuredSearch(cwd: string, env: NodeJS.ProcessEnv): boolean {
  * No allow-list is added: MCP calls still pass through the bridge's canUseTool.
  * The host/model owns the optional MCP session_id; there is no process-wide ID.
  */
-export function resolveSearchOptions(cwd: string, env: NodeJS.ProcessEnv = process.env): SearchOptions {
-  const provider = env.CTI_SEARCH_PROVIDER || 'auto';
+export function resolveSearchOptions(
+  cwd: string,
+  env: NodeJS.ProcessEnv = process.env,
+  provider: SearchProvider = parseSearchProvider(env.CTI_SEARCH_PROVIDER),
+): SearchOptions {
   if (provider === 'builtin') return {};
   if (provider === 'off') return { disallowedTools: WEB_TOOLS };
-  if (provider !== 'auto') {
-    throw new Error('CTI_SEARCH_PROVIDER must be auto, builtin, or off');
-  }
   if (configuredSearch(cwd, env)) return {};
   return {
     mcpServers: {

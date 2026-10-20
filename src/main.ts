@@ -47,7 +47,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
       const check = preflightCheck(cliPath);
       if (check.ok) {
         console.log(`[claude-to-im] Auto: using Claude CLI at ${cliPath} (${check.version})`);
-        return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove);
+        return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove, config.searchProvider);
       }
       // Preflight failed — fall through to Codex instead of silently using a broken CLI
       console.warn(
@@ -92,7 +92,7 @@ async function resolveProvider(config: Config, pendingPerms: PendingPermissions)
     process.exit(1);
   }
 
-  return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove);
+  return new SDKLLMProvider(pendingPerms, cliPath, config.autoApprove, config.searchProvider);
 }
 
 interface StatusInfo {
